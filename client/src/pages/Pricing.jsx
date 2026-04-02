@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { FaArrowLeft, FaCheckCircle } from 'react-icons/fa'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from "motion/react";
 import axios from 'axios';
 import { ServerUrl } from '../App';
@@ -8,6 +8,7 @@ import { useDispatch } from 'react-redux';
 import { setUserData } from '../redux/userSlice';
 function Pricing() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [selectedPlan, setSelectedPlan] = useState("free");
   const [loadingPlan, setLoadingPlan] = useState(null);
   const dispatch = useDispatch()
@@ -30,7 +31,7 @@ function Pricing() {
     {
       id: "basic",
       name: "Starter Pack",
-      price: "₹100",
+      price: "₹1",
       credits: 150,
       description: "Great for focused practice and skill improvement.",
       features: [
@@ -43,7 +44,7 @@ function Pricing() {
     {
       id: "pro",
       name: "Pro Pack",
-      price: "₹500",
+      price: "₹10",
       credits: 650,
       description: "Best value for serious job preparation.",
       features: [
@@ -62,36 +63,36 @@ function Pricing() {
     try {
       setLoadingPlan(plan.id)
 
-      const amount =  
-      plan.id === "basic" ? 100 :
-      plan.id === "pro" ? 500 : 0;
+      const amount =
+        plan.id === "basic" ? 1 :
+          plan.id === "pro" ? 10 : 0;
 
-      const result = await axios.post(ServerUrl + "/api/payment/order" , {
+      const result = await axios.post(ServerUrl + "/api/payment/order", {
         planId: plan.id,
         amount: amount,
         credits: plan.credits,
-      },{withCredentials:true})
-      
+      }, { withCredentials: true })
+
 
       const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: result.data.amount,
-      currency: "INR",
-      name: "InterviewIQ.AI",
-      description: `${plan.name} - ${plan.credits} Credits`,
-      order_id: result.data.id,
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: result.data.amount,
+        currency: "INR",
+        name: "InterviewIQ.AI",
+        description: `${plan.name} - ${plan.credits} Credits`,
+        order_id: result.data.id,
 
-      handler:async function (response) {
-        const verifypay = await axios.post(ServerUrl + "/api/payment/verify" ,response , {withCredentials:true})
-        dispatch(setUserData(verifypay.data.user))
+        handler: async function (response) {
+          const verifypay = await axios.post(ServerUrl + "/api/payment/verify", response, { withCredentials: true })
+          dispatch(setUserData(verifypay.data.user))
 
           alert("Payment Successful 🎉 Credits Added!");
           navigate("/")
 
-      },
-      theme:{
-        color: "#10b981",
-      },
+        },
+        theme: {
+          color: "#10b981",
+        },
 
       }
 
@@ -100,8 +101,8 @@ function Pricing() {
 
       setLoadingPlan(null);
     } catch (error) {
-     console.log(error)
-     setLoadingPlan(null);
+      console.log(error)
+      setLoadingPlan(null);
     }
   }
 
@@ -109,6 +110,13 @@ function Pricing() {
 
   return (
     <div className='min-h-screen bg-gradient-to-br from-gray-50 to-emerald-50 py-16 px-6'>
+
+      {location.state?.reason === 'low-credits' && (
+        <div className='max-w-6xl mx-auto mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 shadow-sm'>
+          <p className='font-semibold'>Not enough credits to start the interview.</p>
+          <p className='mt-1 text-sm'>{location.state?.message || 'Choose a plan to continue your practice.'}</p>
+        </div>
+      )}
 
       <div className='max-w-6xl mx-auto mb-14 flex items-start gap-4'>
 
@@ -194,7 +202,7 @@ function Pricing() {
 
               {!plan.default &&
                 <button
-                disabled={loadingPlan === plan.id}
+                  disabled={loadingPlan === plan.id}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!isSelected) {

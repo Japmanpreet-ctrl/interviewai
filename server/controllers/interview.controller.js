@@ -1,8 +1,144 @@
 import fs from "fs"
+import os from "os";
+import path from "path";
+import { execFile } from "child_process";
 import { askAi } from "../services/openRouter.service.js";
 import { analyzeAtsScore } from "../services/ats.service.js";
 import User from "../models/user.model.js";
 import Interview from "../models/interview.model.js";
+
+const QUICK_RUN_TIMEOUT_MS = 5000;
+const MAX_OUTPUT_LENGTH = 12000;
+
+const clipOutput = (value = "") => {
+  if (value.length <= MAX_OUTPUT_LENGTH) {
+    return value;
+  }
+
+  return `${value.slice(0, MAX_OUTPUT_LENGTH)}\n\n[output truncated]`;
+};
+
+const execFileAsync = (command, args, options = {}) =>
+  new Promise((resolve, reject) => {
+    execFile(command, args, options, (error, stdout, stderr) => {
+      if (error) {
+        reject({
+          error,
+          stdout: stdout || "",
+          stderr: stderr || "",
+        });
+        return;
+      }
+
+      resolve({
+        stdout: stdout || "",
+        stderr: stderr || "",
+      });
+    });
+  });
+
+const getRunnerConfig = (language) => {
+  switch (language) {
+    case "javascript":
+      return {
+        supported: true,
+        fileName: "solution.js",
+        command: "node",
+        args: (filePath) => [filePath],
+      };
+    case "python":
+      return {
+        supported: true,
+        fileName: "solution.py",
+        command: "python3",
+        args: (filePath) => [filePath],
+      };
+    case "cpp":
+      return {
+        supported: true,
+        fileName: "solution.cpp",
+        command: "c++",
+        compileArgs: (filePath, outputPath) => [filePath, "-std=c++17", "-O2", "-o", outputPath],
+        executeCommand: (outputPath) => outputPath,
+        executeArgs: () => [],
+      };
+    case "typescript":
+      return {
+        supported: false,
+        message: "Quick run for TypeScript needs a TypeScript runtime on the server. Submit is still available.",
+      };
+    case "java":
+      return {
+        supported: false,
+        message: "Quick run for Java is unavailable because a Java runtime is not installed on the server.",
+      };
+    case "go":
+      return {
+        supported: false,
+        message: "Quick run for Go is unavailable because the Go toolchain is not installed on the server.",
+      };
+    default:
+      return {
+        supported: false,
+        message: `Quick run is not configured for ${language}.`,
+      };
+  }
+};
+
+const runCodeInSandbox = async ({ language, code }) => {
+  const runner = getRunnerConfig(language);
+
+  if (!runner.supported) {
+    return {
+      ok: false,
+      output: runner.message,
+      status: "unavailable",
+    };
+  }
+
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "interviewiq-run-"));
+  const sourcePath = path.join(tempDir, runner.fileName);
+  const binaryPath = path.join(tempDir, "solution.out");
+
+  try {
+    await fs.promises.writeFile(sourcePath, code, "utf8");
+
+    if (runner.compileArgs) {
+      await execFileAsync(runner.command, runner.compileArgs(sourcePath, binaryPath), {
+        cwd: tempDir,
+        timeout: QUICK_RUN_TIMEOUT_MS,
+        maxBuffer: MAX_OUTPUT_LENGTH,
+      });
+    }
+
+    const executionCommand = runner.executeCommand ? runner.executeCommand(binaryPath) : runner.command;
+    const executionArgs = runner.executeArgs ? runner.executeArgs(sourcePath, binaryPath) : runner.args(sourcePath);
+    const result = await execFileAsync(executionCommand, executionArgs, {
+      cwd: tempDir,
+      timeout: QUICK_RUN_TIMEOUT_MS,
+      maxBuffer: MAX_OUTPUT_LENGTH,
+    });
+
+    const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+
+    return {
+      ok: true,
+      output: clipOutput(combinedOutput || "Program finished with no output."),
+      status: "success",
+    };
+  } catch (failure) {
+    const errorMessage = failure?.stderr || failure?.stdout || failure?.error?.message || "Execution failed.";
+    const didTimeout = failure?.error?.killed || failure?.error?.signal === "SIGTERM";
+
+    return {
+      ok: false,
+      output: clipOutput(didTimeout ? "Execution timed out after 5 seconds." : errorMessage.trim()),
+      status: didTimeout ? "timeout" : "error",
+    };
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+};
 
 export const analyzeResume = async (req, res) => {
   try {
@@ -103,6 +239,29 @@ export const getAtsReport = async (req, res) => {
     return res.status(200).json(report);
   } catch (error) {
     return res.status(500).json({ message: `failed to generate ats report ${error}` });
+  }
+};
+
+export const quickRunCode = async (req, res) => {
+  try {
+    const { language, code } = req.body;
+
+    if (!language?.trim()) {
+      return res.status(400).json({ message: "Language is required." });
+    }
+
+    if (!code?.trim()) {
+      return res.status(400).json({ message: "Code is required." });
+    }
+
+    const result = await runCodeInSandbox({
+      language: language.trim(),
+      code,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({ message: `failed to run code ${error}` });
   }
 };
 
@@ -222,11 +381,17 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
       experience,
       mode,
       resumeText: safeResume,
-      questions: questionsArray.map((q, index) => ({
-        question: q,
-        difficulty: ["easy", "easy", "medium", "medium", "hard"][index],
-        timeLimit: [60, 60, 90, 90, 120][index],
-      }))
+      questions: questionsArray.map((q, index) => {
+        const difficulty = ["easy", "easy", "medium", "medium", "hard"][index];
+        const technicalTimeLimits = [180, 240, 300, 360, 480];
+        const hrTimeLimits = [60, 60, 90, 90, 120];
+
+        return {
+          question: q,
+          difficulty,
+          timeLimit: mode === "Technical" ? technicalTimeLimits[index] : hrTimeLimits[index],
+        };
+      })
     })
 
     res.json({
@@ -242,15 +407,21 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
 
 export const submitAnswer = async (req, res) => {
   try {
-    const { interviewId, questionIndex, answer, timeTaken } = req.body
+    const { interviewId, questionIndex, answer, timeTaken, code, language, explanation } = req.body
 
     const interview = await Interview.findById(interviewId)
     const question = interview.questions[questionIndex]
 
-    if (!answer) {
+    const hasTextAnswer = Boolean(answer?.trim());
+    const hasCodeAnswer = Boolean(code?.trim());
+
+    if (!hasTextAnswer && !hasCodeAnswer) {
       question.score = 0;
       question.feedback = "You did not submit an answer.";
       question.answer = "";
+      question.code = "";
+      question.language = language || question.language || "javascript";
+      question.explanation = explanation || "";
 
       await interview.save();
 
@@ -259,10 +430,13 @@ export const submitAnswer = async (req, res) => {
       });
     }
 
-    if (timeTaken > question.timeLimit) {
+    if (timeTaken > question.timeLimit && interview.mode !== "Technical") {
       question.score = 0;
       question.feedback = "Time limit exceeded. Answer not evaluated.";
       question.answer = answer;
+      question.code = code || "";
+      question.language = language || question.language || "javascript";
+      question.explanation = explanation || answer || "";
 
       await interview.save();
 
@@ -282,8 +456,10 @@ Evaluate naturally and fairly, like a real person would.
 Score the answer in these areas (0 to 10):
 
 1. Confidence – Does the answer sound clear, confident, and well-presented?
-2. Communication – Is the language simple, clear, and easy to understand?
-3. Correctness – Is the answer accurate, relevant, and complete?
+2. Communication – Is the explanation simple, clear, and easy to understand?
+3. Correctness – Is the answer or code accurate, relevant, and complete?
+
+If interview mode is Technical, evaluate both the explanation and submitted code. Reward clean structure, reasonable logic, and language-appropriate syntax even if the solution is not perfect.
 
 Rules:
 - Be realistic and unbiased.
@@ -318,7 +494,12 @@ Return ONLY valid JSON in this format:
       {
         role: "user",
         content: `
+Interview Mode: ${interview.mode}
 Question: ${question.question}
+Language: ${language || question.language || "javascript"}
+Explanation: ${explanation || answer}
+Code:
+${code || "No code submitted"}
 Answer: ${answer}
 `
       }
@@ -328,6 +509,9 @@ Answer: ${answer}
     const parsed = JSON.parse(aiResponse);
 
     question.answer = answer;
+    question.code = code || "";
+    question.language = language || question.language || "javascript";
+    question.explanation = explanation || answer || "";
     question.confidence = parsed.confidence;
     question.communication = parsed.communication;
     question.correctness = parsed.correctness;

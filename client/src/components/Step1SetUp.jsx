@@ -7,16 +7,19 @@ import {
     FaMicrophoneAlt,
     FaChartLine,
     FaBullseye,
+    FaArrowRight,
 } from "react-icons/fa";
 import axios from "axios"
 import { ServerUrl } from '../App';
 import { useDispatch, useSelector } from 'react-redux';
 import { setUserData } from '../redux/userSlice';
 import AtsScoreCard from './AtsScoreCard';
+import { useNavigate } from 'react-router-dom';
 
 function Step1SetUp({ onStart }) {
     const { userData } = useSelector((state) => state.user)
     const dispatch = useDispatch()
+    const navigate = useNavigate()
     const [role, setRole] = useState("");
     const [experience, setExperience] = useState("");
     const [mode, setMode] = useState("Technical");
@@ -31,10 +34,26 @@ function Step1SetUp({ onStart }) {
     const [jobDescription, setJobDescription] = useState("");
     const [atsLoading, setAtsLoading] = useState(false);
     const [atsReport, setAtsReport] = useState(null);
+    const [errorMessage, setErrorMessage] = useState("");
+    const [showPricingCta, setShowPricingCta] = useState(false);
+
+    const getErrorMessage = (error, fallback) => error?.response?.data?.message || error?.message || fallback;
+
+    const goToPricing = () => {
+        navigate('/pricing', {
+            state: {
+                reason: 'low-credits',
+                message: errorMessage || 'Not enough credits. Minimum 50 required.',
+                from: '/interview',
+            },
+        })
+    }
 
     const handleUploadResume = async () => {
         if (!resumeFile || analyzing) return;
         setAnalyzing(true)
+        setErrorMessage("")
+        setShowPricingCta(false)
 
         const formdata = new FormData()
         formdata.append("resume", resumeFile)
@@ -52,6 +71,7 @@ function Step1SetUp({ onStart }) {
             setAtsReport(null);
         } catch (error) {
             console.log(error)
+            setErrorMessage(getErrorMessage(error, "Resume analysis failed."))
         } finally {
             setAnalyzing(false);
         }
@@ -60,6 +80,8 @@ function Step1SetUp({ onStart }) {
     const handleAnalyzeAts = async () => {
         if (!resumeText || atsLoading) return;
         setAtsLoading(true)
+        setErrorMessage("")
+        setShowPricingCta(false)
 
         try {
             const result = await axios.post(ServerUrl + "/api/interview/ats-score", {
@@ -75,21 +97,34 @@ function Step1SetUp({ onStart }) {
             setAtsReport(result.data)
         } catch (error) {
             console.log(error)
+            setErrorMessage(getErrorMessage(error, "ATS scoring failed."))
         } finally {
             setAtsLoading(false)
         }
     }
 
     const handleStart = async () => {
+        if (!userData) {
+            setErrorMessage("Please sign in again before starting the interview.")
+            setShowPricingCta(false)
+            return;
+        }
+
         setLoading(true)
+        setErrorMessage("")
+        setShowPricingCta(false)
         try {
             const result = await axios.post(ServerUrl + "/api/interview/generate-questions", { role, experience, mode, resumeText, projects, skills }, { withCredentials: true })
             if (userData) {
                 dispatch(setUserData({ ...userData, credits: result.data.creditsLeft }))
             }
-            onStart(result.data)
+            onStart({ ...result.data, mode })
         } catch (error) {
             console.log(error)
+            const message = getErrorMessage(error, "Interview could not start.")
+            const lowCredits = message.toLowerCase().includes("credit")
+            setErrorMessage(message)
+            setShowPricingCta(lowCredits)
         } finally {
             setLoading(false)
         }
@@ -157,6 +192,34 @@ function Step1SetUp({ onStart }) {
                     className="p-8 md:p-12 bg-white space-y-6">
 
                     <h2 className='text-3xl font-bold text-gray-800'>Interview Setup</h2>
+
+                    {errorMessage && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`rounded-2xl px-4 py-4 text-sm shadow-sm ${showPricingCta ? 'border border-amber-200 bg-amber-50 text-amber-900' : 'border border-rose-200 bg-rose-50 text-rose-700'}`}
+                        >
+                            <p className='font-medium'>{errorMessage}</p>
+                            {showPricingCta && (
+                                <div className='mt-3 flex flex-wrap items-center gap-3'>
+                                    <button
+                                        type='button'
+                                        onClick={goToPricing}
+                                        className='inline-flex items-center gap-2 rounded-full bg-amber-600 px-4 py-2 text-white hover:bg-amber-700 transition'
+                                    >
+                                        View Plans <FaArrowRight size={12} />
+                                    </button>
+                                    <button
+                                        type='button'
+                                        onClick={() => setShowPricingCta(false)}
+                                        className='rounded-full border border-amber-300 px-4 py-2 text-amber-800 hover:bg-amber-100 transition'
+                                    >
+                                        Stay Here
+                                    </button>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
 
                     <div className='grid md:grid-cols-2 gap-4'>
                         <div className='relative'>
