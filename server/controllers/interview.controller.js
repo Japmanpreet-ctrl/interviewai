@@ -1,5 +1,6 @@
 import fs from "fs"
 import { askAi } from "../services/openRouter.service.js";
+import { analyzeAtsScore } from "../services/ats.service.js";
 import User from "../models/user.model.js";
 import Interview from "../models/interview.model.js";
 
@@ -19,7 +20,6 @@ export const analyzeResume = async (req, res) => {
 
     let resumeText = "";
 
-    // Extract text from all pages
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const content = await page.getTextContent();
@@ -27,7 +27,6 @@ export const analyzeResume = async (req, res) => {
       const pageText = content.items.map(item => item.str).join(" ");
       resumeText += pageText + "\n";
     }
-
 
     resumeText = resumeText
       .replace(/\s+/g, " ")
@@ -55,13 +54,10 @@ Return strictly JSON:
       }
     ];
 
-
     const aiResponse = await askAi(messages)
-
     const parsed = JSON.parse(aiResponse);
 
     fs.unlinkSync(filepath)
-
 
     res.json({
       role: parsed.role,
@@ -82,6 +78,33 @@ Return strictly JSON:
   }
 };
 
+export const getAtsReport = async (req, res) => {
+  try {
+    const { targetRole, jobDescription, resumeText, skills, projects, extractedRole, experience } = req.body;
+
+    if (!resumeText?.trim()) {
+      return res.status(400).json({ message: "Resume analysis is required before ATS scoring." });
+    }
+
+    if (!targetRole?.trim() && !jobDescription?.trim()) {
+      return res.status(400).json({ message: "Target role or job description is required." });
+    }
+
+    const report = await analyzeAtsScore({
+      targetRole: targetRole?.trim() || extractedRole || "General role",
+      jobDescription: jobDescription?.trim() || "",
+      resumeText,
+      skills: Array.isArray(skills) ? skills : [],
+      projects: Array.isArray(projects) ? projects : [],
+      extractedRole: extractedRole?.trim() || "",
+      experience: experience?.trim() || "",
+    });
+
+    return res.status(200).json(report);
+  } catch (error) {
+    return res.status(500).json({ message: `failed to generate ats report ${error}` });
+  }
+};
 
 export const generateQuestion = async (req, res) => {
   try {
@@ -135,7 +158,6 @@ export const generateQuestion = async (req, res) => {
     }
 
     const messages = [
-
       {
         role: "system",
         content: `
@@ -164,23 +186,19 @@ Question 5 → hard
 
 Make questions based on the candidate’s role, experience,interviewMode, projects, skills, and resume details.
 `
-      }
-      ,
+      },
       {
         role: "user",
         content: userPrompt
       }
     ];
 
-
     const aiResponse = await askAi(messages)
 
     if (!aiResponse || !aiResponse.trim()) {
-           
       return res.status(500).json({
         message: "AI returned empty response."
       });
-
     }
 
     const questionsArray = aiResponse
@@ -190,7 +208,6 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
       .slice(0, 5);
 
     if (questionsArray.length === 0) {
-      
       return res.status(500).json({
         message: "AI failed to generate questions."
       });
@@ -223,7 +240,6 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
   }
 }
 
-
 export const submitAnswer = async (req, res) => {
   try {
     const { interviewId, questionIndex, answer, timeTaken } = req.body
@@ -231,7 +247,6 @@ export const submitAnswer = async (req, res) => {
     const interview = await Interview.findById(interviewId)
     const question = interview.questions[questionIndex]
 
-    // If no answer
     if (!answer) {
       question.score = 0;
       question.feedback = "You did not submit an answer.";
@@ -244,7 +259,6 @@ export const submitAnswer = async (req, res) => {
       });
     }
 
-    // If time exceeded
     if (timeTaken > question.timeLimit) {
       question.score = 0;
       question.feedback = "Time limit exceeded. Answer not evaluated.";
@@ -256,7 +270,6 @@ export const submitAnswer = async (req, res) => {
         feedback: question.feedback
       });
     }
-
 
     const messages = [
       {
@@ -301,8 +314,7 @@ Return ONLY valid JSON in this format:
   "feedback": "short human feedback"
 }
 `
-      }
-      ,
+      },
       {
         role: "user",
         content: `
@@ -312,10 +324,7 @@ Answer: ${answer}
       }
     ];
 
-
     const aiResponse = await askAi(messages)
-
-
     const parsed = JSON.parse(aiResponse);
 
     question.answer = answer;
@@ -326,14 +335,11 @@ Answer: ${answer}
     question.feedback = parsed.feedback;
     await interview.save();
 
-
     return res.status(200).json({feedback :parsed.feedback})
   } catch (error) {
     return res.status(500).json({message:`failed to submit answer ${error}`})
-
   }
 }
-
 
 export const finishInterview = async (req,res) => {
   try {
@@ -357,21 +363,10 @@ export const finishInterview = async (req,res) => {
       totalCorrectness += q.correctness || 0;
     });
 
-    const finalScore = totalQuestions
-      ? totalScore / totalQuestions
-      : 0;
-
-    const avgConfidence = totalQuestions
-      ? totalConfidence / totalQuestions
-      : 0;
-
-    const avgCommunication = totalQuestions
-      ? totalCommunication / totalQuestions
-      : 0;
-
-    const avgCorrectness = totalQuestions
-      ? totalCorrectness / totalQuestions
-      : 0;
+    const finalScore = totalQuestions ? totalScore / totalQuestions : 0;
+    const avgConfidence = totalQuestions ? totalConfidence / totalQuestions : 0;
+    const avgCommunication = totalQuestions ? totalCommunication / totalQuestions : 0;
+    const avgCorrectness = totalQuestions ? totalCorrectness / totalQuestions : 0;
 
     interview.finalScore = finalScore;
     interview.status = "completed";
@@ -379,7 +374,7 @@ export const finishInterview = async (req,res) => {
     await interview.save();
 
     return res.status(200).json({
-       finalScore: Number(finalScore.toFixed(1)),
+      finalScore: Number(finalScore.toFixed(1)),
       confidence: Number(avgConfidence.toFixed(1)),
       communication: Number(avgCommunication.toFixed(1)),
       correctness: Number(avgCorrectness.toFixed(1)),
@@ -396,7 +391,6 @@ export const finishInterview = async (req,res) => {
     return res.status(500).json({message:`failed to finish Interview ${error}`})
   }
 }
-
 
 export const getMyInterviews = async (req,res) => {
   try {
@@ -419,7 +413,6 @@ export const getInterviewReport = async (req,res) => {
       return res.status(404).json({ message: "Interview not found" });
     }
 
-
     const totalQuestions = interview.questions.length;
 
     let totalConfidence = 0;
@@ -431,19 +424,11 @@ export const getInterviewReport = async (req,res) => {
       totalCommunication += q.communication || 0;
       totalCorrectness += q.correctness || 0;
     });
-    const avgConfidence = totalQuestions
-      ? totalConfidence / totalQuestions
-      : 0;
+    const avgConfidence = totalQuestions ? totalConfidence / totalQuestions : 0;
+    const avgCommunication = totalQuestions ? totalCommunication / totalQuestions : 0;
+    const avgCorrectness = totalQuestions ? totalCorrectness / totalQuestions : 0;
 
-    const avgCommunication = totalQuestions
-      ? totalCommunication / totalQuestions
-      : 0;
-
-    const avgCorrectness = totalQuestions
-      ? totalCorrectness / totalQuestions
-      : 0;
-
-       return res.json({
+    return res.json({
       finalScore: interview.finalScore,
       confidence: Number(avgConfidence.toFixed(1)),
       communication: Number(avgCommunication.toFixed(1)),
@@ -455,7 +440,3 @@ export const getInterviewReport = async (req,res) => {
     return res.status(500).json({message:`failed to find currentUser Interview report ${error}`})
   }
 }
-
-
-
-
