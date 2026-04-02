@@ -56,70 +56,23 @@ const createTechnicalState = (question) => ({
   },
 });
 
-const COMPANY_STYLE_PRESETS = [
-  { company: "Google", accent: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  { company: "Meta", accent: "bg-sky-50 text-sky-700 border-sky-200", dot: "bg-sky-500" },
-  { company: "Amazon", accent: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
-  { company: "Netflix", accent: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" },
-  { company: "Apple", accent: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-500" },
-];
+const getCompanyTagTone = (company = "") => {
+  const tones = {
+    Google: "border-blue-200 bg-blue-50 text-blue-700",
+    Meta: "border-sky-200 bg-sky-50 text-sky-700",
+    Amazon: "border-orange-200 bg-orange-50 text-orange-700",
+    Microsoft: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    Netflix: "border-rose-200 bg-rose-50 text-rose-700",
+    Apple: "border-slate-200 bg-slate-100 text-slate-700",
+    Uber: "border-violet-200 bg-violet-50 text-violet-700",
+    Airbnb: "border-pink-200 bg-pink-50 text-pink-700",
+    LinkedIn: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    Atlassian: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    Stripe: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
+    Adobe: "border-red-200 bg-red-50 text-red-700",
+  };
 
-const COMPANY_STYLE_CALLOUTS = [
-  { company: "Google", label: "Google-style mock", note: "Practice format", border: "border-blue-200 text-blue-700 bg-blue-50/40" },
-  { company: "Meta", label: "Meta-style mock", note: "Practice format", border: "border-sky-200 text-sky-700 bg-sky-50/40" },
-  { company: "Amazon", label: "Amazon-style mock", note: "Practice format", border: "border-orange-200 text-orange-700 bg-orange-50/40" },
-  { company: "NVIDIA", label: "NVIDIA-style mock", note: "Practice format", border: "border-emerald-200 text-emerald-700 bg-emerald-50/40" },
-  { company: "Microsoft", label: "Microsoft-style mock", note: "Practice format", border: "border-cyan-200 text-cyan-700 bg-cyan-50/40" },
-  { company: "Netflix", label: "Netflix-style mock", note: "Practice format", border: "border-rose-200 text-rose-700 bg-rose-50/40" },
-  { company: "Apple", label: "Apple-style mock", note: "Practice format", border: "border-slate-200 text-slate-700 bg-slate-50/70" },
-  { company: "Uber", label: "Uber-style mock", note: "Practice format", border: "border-violet-200 text-violet-700 bg-violet-50/40" },
-];
-
-const buildQuestionStyleTags = (question = {}, index = 0) => {
-  const text = `${question?.question || ""} ${question?.questionType || ""}`.toLowerCase();
-  const isProjectBased = /(project|architecture|system design|design a|case study|portfolio)/i.test(text);
-  if (isProjectBased) {
-    return [];
-  }
-
-  const preset = COMPANY_STYLE_PRESETS[index % COMPANY_STYLE_PRESETS.length];
-
-  let topic = "Problem Solving";
-  if (/(nlp|keyword|text|language model|token)/i.test(text)) topic = "NLP";
-  else if (/(tree|graph|array|string|linked list|hash|stack|queue|dp|dynamic programming)/i.test(text)) topic = "DSA";
-  else if (/(sql|analytics|dataframe|pandas|numpy|etl|data)/i.test(text)) topic = "Data";
-  else if (/(api|frontend|dom|react|node|javascript|browser)/i.test(text)) topic = "App Logic";
-  else if (/(ml|model|classification|regression|tensor|pytorch|tensorflow)/i.test(text)) topic = "ML";
-
-  return [
-    { label: `${preset.company}-style`, accent: preset.accent, dot: preset.dot },
-    { label: `${topic} practice`, accent: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
-    { label: `${question?.difficulty || "General"} round`, accent: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  ];
-};
-
-const buildQuestionStyleCallouts = (question = {}, index = 0) => {
-  const text = `${question?.question || ""} ${question?.questionType || ""}`.toLowerCase();
-  const isProjectBased = /(project|architecture|system design|design a|case study|portfolio)/i.test(text);
-  if (isProjectBased) {
-    return [];
-  }
-
-  const pool = [...COMPANY_STYLE_CALLOUTS];
-  const seed = `${question?.question || ""}-${index}`;
-  let hash = 0;
-
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-
-  for (let i = pool.length - 1; i > 0; i -= 1) {
-    hash = (hash * 1664525 + 1013904223) >>> 0;
-    const j = hash % (i + 1);
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-
-  return pool.slice(0, 2);
+  return tones[company] || "border-slate-200 bg-slate-50 text-slate-700";
 };
 
 const ProctoringAlertStack = ({ alerts }) => {
@@ -209,7 +162,16 @@ function Step2Interview({ interviewData, onFinish }) {
   }, [questionStates, currentIndex, isTechnicalMode]);
   const technicalTimerReached = isTechnicalMode && timeLeft === 0 && !feedback;
   const suggestedMinutes = Math.max(1, Math.round((currentQuestion?.timeLimit || 60) / 60));
-  const questionStyleCallouts = useMemo(() => buildQuestionStyleCallouts(currentQuestion, currentIndex), [currentQuestion, currentIndex]);
+  const interviewStyleTags = useMemo(() => {
+    if (!currentQuestion?.companyTag || !currentQuestion?.yearTag || !currentQuestion?.roundTag) {
+      return [];
+    }
+
+    return [{
+      label: `${currentQuestion.companyTag} ${currentQuestion.yearTag} ${currentQuestion.roundTag}`,
+      className: getCompanyTagTone(currentQuestion.companyTag),
+    }];
+  }, [currentQuestion]);
   const feedbackTone = useMemo(() => {
     const text = (feedback || "").toLowerCase();
     if (!text) return "neutral";
@@ -545,7 +507,7 @@ function Step2Interview({ interviewData, onFinish }) {
         cameraStreamRef.current = stream;
         if (candidateVideoRef.current) {
           candidateVideoRef.current.srcObject = stream;
-          candidateVideoRef.current.play().catch(() => {});
+          candidateVideoRef.current.play().catch(() => { });
         }
 
         setCameraPermission("granted");
@@ -1172,9 +1134,8 @@ function Step2Interview({ interviewData, onFinish }) {
                       <FaVideo size={14} />
                       Camera
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      cameraPermission === "granted" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"
-                    }`}>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cameraPermission === "granted" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"
+                      }`}>
                       {cameraPermission === "granted" ? "Live" : "Blocked"}
                     </span>
                   </div>
@@ -1222,16 +1183,15 @@ function Step2Interview({ interviewData, onFinish }) {
                   </div>
                 )}
 
-                {questionStyleCallouts.length > 0 && (
-                  <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                    {questionStyleCallouts.map((item) => (
-                      <div
+                {interviewStyleTags.length > 0 && (
+                  <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                    {interviewStyleTags.map((item) => (
+                      <span
                         key={item.label}
-                        className={`rounded-[28px] border px-6 py-5 shadow-sm ${item.border}`}
+                        className={`inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm font-semibold shadow-sm ${item.className}`}
                       >
-                        <div className="text-lg font-semibold">{item.label}</div>
-                        <div className="mt-2 text-sm opacity-80">{item.note}</div>
-                      </div>
+                        {item.label}
+                      </span>
                     ))}
                   </div>
                 )}
@@ -1273,45 +1233,45 @@ function Step2Interview({ interviewData, onFinish }) {
 
           <div className="border-t border-slate-200 bg-white px-5 py-5 sm:px-6">
             <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-950 shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.24em] text-emerald-300/80">User response transcription</p>
-                    <p className="mt-1 text-sm text-slate-400">Live transcript only. This panel is non-editable.</p>
+              <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-emerald-300/80">User response transcription</p>
+                  <p className="mt-1 text-sm text-slate-400">Live transcript only. This panel is non-editable.</p>
+                </div>
+                {activeWarningBadges.length ? (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {activeWarningBadges.map((item) => {
+                      const appearance = getAlertAppearance(item.severity);
+                      return (
+                        <span
+                          key={item.type}
+                          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${appearance.badge}`}
+                        >
+                          <FaTriangleExclamation size={12} />
+                          {item.label}
+                        </span>
+                      );
+                    })}
                   </div>
-                  {activeWarningBadges.length ? (
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {activeWarningBadges.map((item) => {
-                        const appearance = getAlertAppearance(item.severity);
-                        return (
-                          <span
-                            key={item.type}
-                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${appearance.badge}`}
-                          >
-                            <FaTriangleExclamation size={12} />
-                            {item.label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">
-                      {detectorStatus === "ready"
-                        ? "No active proctoring alerts."
-                        : "Fallback monitoring is active while the detector initializes."}
-                    </p>
-                  )}
-                </div>
-                <div className="min-h-[220px] bg-slate-950 px-5 py-5 text-sm leading-7 text-slate-100">
-                  {currentState.answer?.trim() ? (
-                    <p className="whitespace-pre-wrap break-words">{currentState.answer}</p>
-                  ) : (
-                    <p className="text-slate-400">
-                      {isMicOn
-                        ? "Turn on your mic and start answering. Your transcript will appear here automatically."
-                        : "Transcript will appear here once the microphone is active and speech is detected."}
-                    </p>
-                  )}
-                </div>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    {detectorStatus === "ready"
+                      ? "No active proctoring alerts."
+                      : "Fallback monitoring is active while the detector initializes."}
+                  </p>
+                )}
+              </div>
+              <div className="min-h-[220px] bg-slate-950 px-5 py-5 text-sm leading-7 text-slate-100">
+                {currentState.answer?.trim() ? (
+                  <p className="whitespace-pre-wrap break-words">{currentState.answer}</p>
+                ) : (
+                  <p className="text-slate-400">
+                    {isMicOn
+                      ? "Turn on your mic and start answering. Your transcript will appear here automatically."
+                      : "Transcript will appear here once the microphone is active and speech is detected."}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="mt-4">
@@ -1335,47 +1295,44 @@ function Step2Interview({ interviewData, onFinish }) {
                     {isSubmitting ? "Submitting..." : isTechnicalMode ? "Submit Work" : "Submit Answer"}
                   </motion.button>
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 lg:flex-1">
-                      {!speechSupported
-                        ? "Speech recognition is not supported in this browser. Use Chrome for live transcription."
-                      : `${cameraStatusText} ${
-                          !isMicOn
-                            ? micPermission === "unavailable"
-                              ? "No microphone device was found."
-                              : micPermission === "blocked"
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 lg:flex-1">
+                    {!speechSupported
+                      ? "Speech recognition is not supported in this browser. Use Chrome for live transcription."
+                      : `${cameraStatusText} ${!isMicOn
+                        ? micPermission === "unavailable"
+                          ? "No microphone device was found."
+                          : micPermission === "blocked"
+                            ? "Microphone permission was blocked."
+                            : "Mic is muted."
+                        : micPermission === "prompt"
+                          ? "Waiting to request microphone permission."
+                          : micPermission === "unavailable"
+                            ? "No microphone device was found."
+                            : micPermission === "blocked"
                               ? "Microphone permission was blocked."
-                              : "Mic is muted."
-                            : micPermission === "prompt"
-                              ? "Waiting to request microphone permission."
-                              : micPermission === "unavailable"
-                                ? "No microphone device was found."
-                                : micPermission === "blocked"
-                                ? "Microphone permission was blocked."
-                                : isListening
-                                  ? "Mic is listening."
-                                  : "Mic is reconnecting..."
-                        }`}
-                    </div>
+                              : isListening
+                                ? "Mic is listening."
+                                : "Mic is reconnecting..."
+                      }`}
+                  </div>
                 </div>
               ) : (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className={`rounded-2xl p-5 shadow-sm ${
-                    feedbackTone === "negative"
+                  className={`rounded-2xl p-5 shadow-sm ${feedbackTone === "negative"
                       ? "border border-rose-200 bg-rose-50"
                       : feedbackTone === "positive"
                         ? "border border-emerald-200 bg-emerald-50"
                         : "border border-amber-200 bg-amber-50"
-                  }`}
+                    }`}
                 >
-                  <p className={`mb-4 font-medium ${
-                    feedbackTone === "negative"
+                  <p className={`mb-4 font-medium ${feedbackTone === "negative"
                       ? "text-rose-700"
                       : feedbackTone === "positive"
                         ? "text-emerald-700"
                         : "text-amber-700"
-                  }`}>{feedback}</p>
+                    }`}>{feedback}</p>
                   <button
                     onClick={handleNext}
                     className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-950 py-3 text-white transition hover:bg-slate-800"

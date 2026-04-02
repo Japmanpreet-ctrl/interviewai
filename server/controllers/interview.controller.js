@@ -109,6 +109,255 @@ const DIFFICULTY_WEIGHTS = {
   hard: 2,
 };
 
+const COMPANY_TAG_POOL = [
+  "Google",
+  "Meta",
+  "Amazon",
+  "Microsoft",
+  "Netflix",
+  "Apple",
+  "Uber",
+  "Airbnb",
+  "LinkedIn",
+  "Atlassian",
+  "Stripe",
+  "Adobe",
+];
+
+const YEAR_TAG_POOL = ["2021", "2022", "2023", "2024", "2025", "2026"];
+
+const ROUND_TAG_POOL = [
+  "Online Assessment",
+  "Phone Screen",
+  "Tech Round 1",
+  "Tech Round 2",
+  "Coding Round",
+  "Hiring Loop",
+];
+
+const shuffleList = (items = []) => {
+  const cloned = [...items];
+
+  for (let index = cloned.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [cloned[index], cloned[swapIndex]] = [cloned[swapIndex], cloned[index]];
+  }
+
+  return cloned;
+};
+
+const normalizeForMatching = (value = "") =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const isPersonalizedCodingQuestion = ({ question = "", projects = [] }) => {
+  const normalizedQuestion = normalizeForMatching(question);
+
+  if (!normalizedQuestion) {
+    return false;
+  }
+
+  const candidateContextPatterns = [
+    /\byour experience\b/,
+    /\byour project\b/,
+    /\byour projects\b/,
+    /\bon your resume\b/,
+    /\bfrom your resume\b/,
+    /\bbased on your\b/,
+    /\byou built\b/,
+    /\byou worked on\b/,
+    /\byou have worked\b/,
+    /\byour background\b/,
+    /\byour previous\b/,
+    /\byour past\b/,
+    /\bgiven your\b/,
+  ];
+
+  if (candidateContextPatterns.some((pattern) => pattern.test(normalizedQuestion))) {
+    return true;
+  }
+
+  return (projects || []).some((project) => {
+    const normalizedProject = normalizeForMatching(project);
+    if (!normalizedProject) {
+      return false;
+    }
+
+    return normalizedProject.length >= 4 && normalizedQuestion.includes(normalizedProject);
+  });
+};
+
+const buildQuestionInterviewTag = ({ question, questionType, projects, tagIndex, companies, years, rounds }) => {
+  const isEligibleCodingQuestion =
+    questionType === "coding" &&
+    !isPersonalizedCodingQuestion({ question, projects });
+
+  if (!isEligibleCodingQuestion) {
+    return {
+      companyTag: "",
+      yearTag: "",
+      roundTag: "",
+    };
+  }
+
+  return {
+    companyTag: companies[tagIndex % companies.length],
+    yearTag: years[tagIndex % years.length],
+    roundTag: rounds[tagIndex % rounds.length],
+  };
+};
+
+const normalizeQuestionSignature = (value = "") =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const hasQuestionOverlap = (questionText = "", seenSignatures = new Set()) => {
+  const normalized = normalizeQuestionSignature(questionText);
+  if (!normalized) {
+    return false;
+  }
+
+  if (seenSignatures.has(normalized)) {
+    return true;
+  }
+
+  const normalizedTokens = normalized.split(" ").filter((token) => token.length > 2);
+  const normalizedCore = normalizedTokens.slice(0, 10).join(" ");
+
+  if (normalizedCore && seenSignatures.has(normalizedCore)) {
+    return true;
+  }
+
+  for (const signature of seenSignatures) {
+    if (
+      signature.includes(normalizedCore) ||
+      normalized.includes(signature)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const QUESTION_COUNT = 6;
+const TECHNICAL_DIFFICULTY_SEQUENCE = ["easy", "easy", "medium", "medium", "medium", "hard"];
+const QUESTION_GENERATION_ATTEMPTS = 3;
+
+const buildTechnicalQuestionPrompt = ({ previousQuestionsText = "None" }) => `
+You are a senior software engineer designing a realistic mock interview.
+
+Return ONLY valid JSON as an array with exactly 6 items.
+Each item must follow this exact shape:
+{
+  "question": "string",
+  "category": "role_based" | "project_based" | "behavioral",
+  "requiresCode": boolean,
+  "questionType": "coding" | "debugging" | "discussion",
+  "starterCode": "string"
+}
+
+You must produce exactly:
+- 2 role_based questions
+- 2 project_based questions
+- 2 behavioral questions
+
+Rules:
+- role_based questions must be DSA or problem-solving oriented for the target role and must require code.
+- project_based questions must come directly from the candidate's resume projects and must not repeat role_based questions.
+- behavioral questions must be professional and realistic and must not require code.
+- At least 4 of the 6 questions must require code overall.
+- Keep all 6 questions clearly different from each other.
+- Do not ask any question that is the same as, a rewording of, or substantially overlaps with any question listed in PREVIOUS_QUESTIONS.
+- Keep each question to one sentence.
+- Avoid generic filler wording.
+- For debugging questions, starterCode must contain a short buggy JavaScript snippet relevant to the question.
+- For coding questions, starterCode may contain a JavaScript function signature or a tiny scaffold.
+- For discussion questions, starterCode must be an empty string.
+- Do not wrap the JSON in markdown fences.
+
+PREVIOUS_QUESTIONS:
+${previousQuestionsText}
+`;
+
+const buildHrQuestionPrompt = ({ previousQuestionsText = "None" }) => `
+You are a real human interviewer conducting a professional interview.
+
+Generate exactly 6 interview questions.
+
+Strict Rules:
+- Return one question per line only.
+- Each question must contain between 15 and 25 words.
+- Each question must be a single complete sentence.
+- Do NOT number them.
+- Do NOT add explanations.
+- Do NOT add extra text before or after.
+- Keep language simple and conversational.
+- Keep all 6 questions different from each other.
+- Avoid any question that is the same as, a rewording of, or substantially overlaps with PREVIOUS_QUESTIONS.
+
+Mix:
+- 2 role-focused scenario questions
+- 2 resume-project questions
+- 2 behavioral questions
+
+Difficulty progression:
+Question 1 -> easy
+Question 2 -> easy
+Question 3 -> medium
+Question 4 -> medium
+Question 5 -> medium
+Question 6 -> hard
+
+PREVIOUS_QUESTIONS:
+${previousQuestionsText}
+`;
+
+const hasRequiredTechnicalMix = (questions = []) => {
+  const counts = questions.reduce((total, item) => {
+    const category = item.category || "general";
+    total[category] = (total[category] || 0) + 1;
+    return total;
+  }, {});
+
+  const requiredCodeCount = questions.filter((item) => item.requiresCode).length;
+  const roleBasedCount = counts.role_based || 0;
+  const projectBasedCount = counts.project_based || 0;
+  const behavioralCount = counts.behavioral || 0;
+
+  return (
+    questions.length === QUESTION_COUNT &&
+    roleBasedCount === 2 &&
+    projectBasedCount === 2 &&
+    behavioralCount === 2 &&
+    requiredCodeCount >= 4 &&
+    questions.slice(0, 2).every((item) => item.category === "role_based" && item.requiresCode) &&
+    questions.slice(2, 4).every((item) => item.category === "project_based") &&
+    questions.slice(4, 6).every((item) => item.category === "behavioral" && !item.requiresCode)
+  );
+};
+
+const hasRequiredHrMix = (questions = []) => {
+  const counts = questions.reduce((total, item) => {
+    const category = item.category || "general";
+    total[category] = (total[category] || 0) + 1;
+    return total;
+  }, {});
+
+  return (
+    questions.length === QUESTION_COUNT &&
+    (counts.role_based || 0) === 2 &&
+    (counts.project_based || 0) === 2 &&
+    (counts.behavioral || 0) === 2
+  );
+};
+
 const extractExperienceYears = (value = "") => {
   const yearsMatch = value.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/i);
   if (yearsMatch) {
@@ -456,6 +705,37 @@ export const generateQuestion = async (req, res) => {
       : "None";
 
     const safeResume = resumeText?.trim() || "None";
+    const resumeFingerprint = safeResume.toLowerCase();
+
+    const previousInterviews = await Interview.find({
+      userId: user._id,
+      resumeText: safeResume,
+    }).select("questions.question");
+
+    const previousQuestionSignatures = new Set();
+    const previousQuestionList = [];
+
+    previousInterviews.forEach((interview) => {
+      (interview.questions || []).forEach((item) => {
+        const questionText = item?.question?.trim();
+        if (!questionText) {
+          return;
+        }
+
+        const normalized = normalizeQuestionSignature(questionText);
+        const normalizedCore = normalized.split(" ").filter((token) => token.length > 2).slice(0, 10).join(" ");
+
+        previousQuestionList.push(`- ${questionText}`);
+        previousQuestionSignatures.add(normalized);
+        if (normalizedCore) {
+          previousQuestionSignatures.add(normalizedCore);
+        }
+      });
+    });
+
+    const previousQuestionsText = previousQuestionList.length
+      ? previousQuestionList.join("\n")
+      : "None";
 
     const userPrompt = `
 Role:${role}
@@ -464,6 +744,7 @@ InterviewMode:${mode}
 Projects:${projectText}
 Skills:${skillsText}
 Resume:${safeResume}
+ResumeFingerprint:${resumeFingerprint}
 `;
 
     if (!userPrompt.trim()) {
@@ -473,76 +754,8 @@ Resume:${safeResume}
     }
 
     const questionSystemPrompt = mode === "Technical"
-      ? `
-You are a senior software engineer designing a realistic technical interview.
-
-Return ONLY valid JSON as an array with exactly 5 items.
-Each item must follow this exact shape:
-{
-  "question": "string",
-  "requiresCode": true,
-  "questionType": "coding" | "debugging" | "discussion",
-  "starterCode": "string"
-}
-
-Rules for technical interviews:
-- At least 3 of the 5 questions must require code.
-- Include a mix of implementation, debugging, reasoning, edge cases, and tradeoff discussion.
-- Make the questions role-specific using the candidate's projects, skills, resume, and experience.
-- Avoid generic HR phrasing.
-- Questions should become harder across the interview.
-- Each question should sound like something a real interviewer would ask.
-- Keep each question to one sentence.
-- For debugging questions, starterCode must contain a short buggy JavaScript snippet relevant to the question.
-- For coding questions, starterCode may contain a JavaScript function signature or a tiny scaffold.
-- For discussion questions, starterCode must be an empty string.
-- Do not wrap the JSON in markdown fences.
-`
-      : `
-You are a real human interviewer conducting a professional interview.
-
-Speak in simple, natural English as if you are directly talking to the candidate.
-
-Generate exactly 5 interview questions.
-
-Strict Rules:
-- Each question must contain between 15 and 25 words.
-- Each question must be a single complete sentence.
-- Do NOT number them.
-- Do NOT add explanations.
-- Do NOT add extra text before or after.
-- One question per line only.
-- Keep language simple and conversational.
-- Questions must feel practical and realistic.
-
-Difficulty progression:
-Question 1 -> easy
-Question 2 -> easy
-Question 3 -> medium
-Question 4 -> medium
-Question 5 -> hard
-
-Make questions based on the candidate's role, experience, interview mode, projects, skills, and resume details.
-`;
-
-    const messages = [
-      {
-        role: "system",
-        content: questionSystemPrompt
-      },
-      {
-        role: "user",
-        content: userPrompt
-      }
-    ];
-
-    const aiResponse = await askAi(messages)
-
-    if (!aiResponse || !aiResponse.trim()) {
-      return res.status(500).json({
-        message: "AI returned empty response."
-      });
-    }
+      ? buildTechnicalQuestionPrompt({ previousQuestionsText })
+      : buildHrQuestionPrompt({ previousQuestionsText });
 
     const inferTechnicalType = (questionText = "") => {
       const lower = questionText.toLowerCase();
@@ -563,64 +776,127 @@ Make questions based on the candidate's role, experience, interview mode, projec
 
     let questionsArray = [];
 
-    if (mode === "Technical") {
-      let questionDrafts = [];
+    for (let attempt = 0; attempt < QUESTION_GENERATION_ATTEMPTS; attempt += 1) {
+      const messages = [
+        {
+          role: "system",
+          content: questionSystemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ];
 
-      try {
-        const parsed = parseAiJson(aiResponse);
-        questionDrafts = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.questions) ? parsed.questions : [];
-      } catch {
-        questionDrafts = aiResponse
+      const aiResponse = await askAi(messages);
+
+      if (!aiResponse || !aiResponse.trim()) {
+        continue;
+      }
+
+      let nextQuestions = [];
+
+      if (mode === "Technical") {
+        let questionDrafts = [];
+
+        try {
+          const parsed = parseAiJson(aiResponse);
+          questionDrafts = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.questions) ? parsed.questions : [];
+        } catch {
+          questionDrafts = aiResponse
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .slice(0, QUESTION_COUNT)
+            .map((question, index) => ({
+              question,
+              category: index < 2 ? "role_based" : index < 4 ? "project_based" : "behavioral",
+              requiresCode: index < 4,
+              questionType: index < 4 ? inferTechnicalType(question) : "discussion",
+              starterCode: "",
+            }));
+        }
+
+        nextQuestions = questionDrafts
+          .filter((item) => item && typeof item.question === "string")
+          .slice(0, QUESTION_COUNT)
+          .map((item, index) => {
+            const question = item.question.trim();
+            const questionType = ["coding", "debugging", "discussion"].includes(item.questionType)
+              ? item.questionType
+              : inferTechnicalType(question);
+            const fallbackCategory = index < 2 ? "role_based" : index < 4 ? "project_based" : "behavioral";
+            const category = ["role_based", "project_based", "behavioral"].includes(item.category)
+              ? item.category
+              : fallbackCategory;
+            const requiresCodeByCategory = category === "behavioral" ? false : true;
+
+            return {
+              question,
+              category,
+              requiresCode: category === "behavioral"
+                ? false
+                : typeof item.requiresCode === "boolean"
+                  ? item.requiresCode
+                  : requiresCodeByCategory || inferRequiresCode(question, questionType),
+              questionType: category === "behavioral" ? "discussion" : questionType,
+              starterCode: category === "behavioral" ? "" : typeof item.starterCode === "string" ? item.starterCode.trim() : "",
+            };
+          });
+      } else {
+        nextQuestions = aiResponse
           .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .slice(0, 5)
-          .map((question) => ({
+          .map((q) => q.trim())
+          .filter((q) => q.length > 0)
+          .slice(0, QUESTION_COUNT)
+          .map((question, index) => ({
             question,
-            requiresCode: inferRequiresCode(question),
-            questionType: inferTechnicalType(question),
+            category: index < 2 ? "role_based" : index < 4 ? "project_based" : "behavioral",
+            requiresCode: false,
+            questionType: "discussion",
             starterCode: "",
           }));
       }
 
-      questionsArray = questionDrafts
-        .filter((item) => item && typeof item.question === "string")
-        .slice(0, 5)
-        .map((item) => {
-          const question = item.question.trim();
-          const questionType = ["coding", "debugging", "discussion"].includes(item.questionType)
-            ? item.questionType
-            : inferTechnicalType(question);
+      nextQuestions = nextQuestions.filter((item, index, collection) => {
+        const questionText = item?.question?.trim();
+        if (!questionText) {
+          return false;
+        }
 
-          return {
-            question,
-            requiresCode: typeof item.requiresCode === "boolean" ? item.requiresCode : inferRequiresCode(question, questionType),
-            questionType,
-            starterCode: typeof item.starterCode === "string" ? item.starterCode.trim() : "",
-          };
-        });
-    } else {
-      questionsArray = aiResponse
-        .split("\n")
-        .map((q) => q.trim())
-        .filter((q) => q.length > 0)
-        .slice(0, 5)
-        .map((question) => ({
-          question,
-          requiresCode: false,
-          questionType: "discussion",
-          starterCode: "",
-        }));
+        const normalized = normalizeQuestionSignature(questionText);
+        const firstIndex = collection.findIndex((candidate) => normalizeQuestionSignature(candidate.question) === normalized);
+
+        if (firstIndex !== index) {
+          return false;
+        }
+
+        return !hasQuestionOverlap(questionText, previousQuestionSignatures);
+      });
+
+      const hasValidMix = mode === "Technical"
+        ? hasRequiredTechnicalMix(nextQuestions)
+        : hasRequiredHrMix(nextQuestions);
+
+      if (hasValidMix) {
+        questionsArray = nextQuestions;
+        break;
+      }
     }
 
-    if (questionsArray.length === 0) {
+    if (questionsArray.length !== QUESTION_COUNT) {
       return res.status(500).json({
-        message: "AI failed to generate questions."
+        message: "AI failed to generate 6 unique questions for this resume. Please try again."
       });
     }
 
     user.credits -= 50;
     await user.save();
+
+    const shuffledCompanies = shuffleList(COMPANY_TAG_POOL);
+    const shuffledYears = shuffleList(YEAR_TAG_POOL);
+    const shuffledRounds = shuffleList(ROUND_TAG_POOL);
+    let eligibleTagIndex = 0;
 
     const interview = await Interview.create({
       userId: user._id,
@@ -629,7 +905,7 @@ Make questions based on the candidate's role, experience, interview mode, projec
       mode,
       resumeText: safeResume,
       questions: questionsArray.map((item, index) => {
-        const difficulty = ["easy", "easy", "medium", "medium", "hard"][index];
+        const difficulty = TECHNICAL_DIFFICULTY_SEQUENCE[index] || "medium";
         const { timeLimit, minimumSubmissionTime } = calculateTimePlan({
           mode,
           question: item.question,
@@ -639,14 +915,32 @@ Make questions based on the candidate's role, experience, interview mode, projec
           experience,
         });
 
+        const questionTags = buildQuestionInterviewTag({
+          question: item.question,
+          questionType: item.questionType || "discussion",
+          projects,
+          tagIndex: eligibleTagIndex,
+          companies: shuffledCompanies,
+          years: shuffledYears,
+          rounds: shuffledRounds,
+        });
+
+        if (questionTags.companyTag) {
+          eligibleTagIndex += 1;
+        }
+
         return {
           question: item.question,
           difficulty,
           timeLimit,
           minimumSubmissionTime,
+          category: item.category || "general",
           requiresCode: Boolean(item.requiresCode),
           questionType: item.questionType || "discussion",
           starterCode: item.starterCode || "",
+          companyTag: questionTags.companyTag,
+          yearTag: questionTags.yearTag,
+          roundTag: questionTags.roundTag,
         };
       })
     })
@@ -658,7 +952,7 @@ Make questions based on the candidate's role, experience, interview mode, projec
       questions: interview.questions
     });
   } catch (error) {
-    return res.status(500).json({message:`failed to create interview ${error}`})
+    return res.status(500).json({ message: `failed to create interview ${error}` })
   }
 }
 export const submitAnswer = async (req, res) => {
@@ -692,9 +986,9 @@ export const submitAnswer = async (req, res) => {
       question.code = "";
       question.language = language || question.language || "javascript";
       question.explanation = explanation || "";
-       question.submittedAtSeconds = safeTimeTaken;
-       question.submittedTooEarly = false;
-       question.timingFlag = "";
+      question.submittedAtSeconds = safeTimeTaken;
+      question.submittedTooEarly = false;
+      question.timingFlag = "";
 
       await interview.save();
 
@@ -824,7 +1118,7 @@ ${answer || "No answer text submitted"}
       timeTaken: safeTimeTaken,
     })
   } catch (error) {
-    return res.status(500).json({message:`failed to submit answer ${error}`})
+    return res.status(500).json({ message: `failed to submit answer ${error}` })
   }
 }
 
@@ -834,12 +1128,12 @@ const recalculateProctoringSummary = (warnings = []) => {
   const activeCount = activeWarnings.length;
   const lastEventAt = warnings.length
     ? warnings.reduce((latest, warning) => {
-        const candidate = warning.endedAt || warning.startedAt;
-        if (!latest || new Date(candidate) > new Date(latest)) {
-          return candidate;
-        }
-        return latest;
-      }, null)
+      const candidate = warning.endedAt || warning.startedAt;
+      if (!latest || new Date(candidate) > new Date(latest)) {
+        return candidate;
+      }
+      return latest;
+    }, null)
     : null;
 
   // Risk should primarily represent what is happening right now, not linger
@@ -932,12 +1226,12 @@ export const logProctoringEvent = async (req, res) => {
   }
 }
 
-export const finishInterview = async (req,res) => {
+export const finishInterview = async (req, res) => {
   try {
-    const {interviewId} = req.body
+    const { interviewId } = req.body
     const interview = await Interview.findById(interviewId)
-    if(!interview){
-      return res.status(400).json({message:"failed to find Interview"})
+    if (!interview) {
+      return res.status(400).json({ message: "failed to find Interview" })
     }
 
     const totalQuestions = interview.questions.length;
@@ -985,24 +1279,24 @@ export const finishInterview = async (req,res) => {
       })),
     })
   } catch (error) {
-    return res.status(500).json({message:`failed to finish Interview ${error}`})
+    return res.status(500).json({ message: `failed to finish Interview ${error}` })
   }
 }
 
-export const getMyInterviews = async (req,res) => {
+export const getMyInterviews = async (req, res) => {
   try {
-    const interviews = await Interview.find({userId:req.userId})
-    .sort({ createdAt: -1 })
-    .select("role experience mode finalScore status createdAt");
+    const interviews = await Interview.find({ userId: req.userId })
+      .sort({ createdAt: -1 })
+      .select("role experience mode finalScore status createdAt");
 
     return res.status(200).json(interviews)
 
   } catch (error) {
-     return res.status(500).json({message:`failed to find currentUser Interview ${error}`})
+    return res.status(500).json({ message: `failed to find currentUser Interview ${error}` })
   }
 }
 
-export const getInterviewReport = async (req,res) => {
+export const getInterviewReport = async (req, res) => {
   try {
     const interview = await Interview.findById(req.params.id)
 
@@ -1035,6 +1329,6 @@ export const getInterviewReport = async (req,res) => {
     });
 
   } catch (error) {
-    return res.status(500).json({message:`failed to find currentUser Interview report ${error}`})
+    return res.status(500).json({ message: `failed to find currentUser Interview report ${error}` })
   }
 }
