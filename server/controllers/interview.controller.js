@@ -103,6 +103,96 @@ const execFileAsync = (command, args, options = {}) =>
     });
   });
 
+const DIFFICULTY_WEIGHTS = {
+  easy: 0,
+  medium: 1,
+  hard: 2,
+};
+
+const extractExperienceYears = (value = "") => {
+  const yearsMatch = value.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/i);
+  if (yearsMatch) {
+    return Number(yearsMatch[1]);
+  }
+
+  const plainNumber = value.match(/\b(\d+(?:\.\d+)?)\b/);
+  return plainNumber ? Number(plainNumber[1]) : 0;
+};
+
+const estimateQuestionComplexity = ({ question = "", questionType = "discussion", requiresCode = false }) => {
+  const lower = question.toLowerCase();
+  const keywordGroups = [
+    ["dynamic programming", "dp", "graph", "tree", "backtracking", "shortest path", "dfs", "bfs"],
+    ["concurrency", "parallel", "thread", "locking", "race condition", "distributed", "consensus"],
+    ["machine learning", "neural", "nlp", "tensorflow", "pytorch", "ranking", "wordnet", "vector"],
+    ["optimize", "scale", "latency", "throughput", "memory", "tradeoff", "streaming", "real time"],
+    ["debug", "broken", "bug", "fix", "edge case", "refactor", "test case"],
+  ];
+
+  const keywordScore = keywordGroups.reduce((total, group) => {
+    return total + (group.some((term) => lower.includes(term)) ? 1 : 0);
+  }, 0);
+
+  const lengthScore = Math.min(3, Math.floor(question.trim().split(/\s+/).length / 18));
+  const codingScore = requiresCode ? 2 : 0;
+  const typeScore =
+    questionType === "coding" ? 2 : questionType === "debugging" ? 1 : 0;
+
+  return keywordScore + lengthScore + codingScore + typeScore;
+};
+
+const calculateTimePlan = ({
+  mode,
+  question,
+  difficulty = "easy",
+  questionType = "discussion",
+  requiresCode = false,
+  experience = "",
+}) => {
+  const difficultyWeight = DIFFICULTY_WEIGHTS[difficulty] ?? 0;
+  const complexity = estimateQuestionComplexity({ question, questionType, requiresCode });
+  const experienceYears = extractExperienceYears(experience);
+  const experienceAdjustment = experienceYears >= 5 ? -30 : experienceYears >= 2 ? 0 : 45;
+
+  if (mode === "Technical") {
+    const baseSeconds = [300, 480, 720][difficultyWeight] || 300;
+    const typeAdjustment =
+      questionType === "coding" ? 90 : questionType === "debugging" ? 60 : 15;
+    const complexityAdjustment = complexity * 25;
+    const timeLimit = Math.max(
+      240,
+      Math.min(1200, baseSeconds + typeAdjustment + complexityAdjustment + experienceAdjustment)
+    );
+
+    const ratio =
+      questionType === "coding"
+        ? [0.28, 0.32, 0.38][difficultyWeight] || 0.28
+        : questionType === "debugging"
+          ? [0.24, 0.28, 0.32][difficultyWeight] || 0.24
+          : [0.2, 0.24, 0.28][difficultyWeight] || 0.2;
+
+    const minimumSubmissionTime = Math.max(
+      60,
+      Math.min(timeLimit - 30, Math.round(timeLimit * ratio + complexity * 10))
+    );
+
+    return { timeLimit, minimumSubmissionTime };
+  }
+
+  const baseSeconds = [75, 120, 180][difficultyWeight] || 75;
+  const complexityAdjustment = complexity * 10;
+  const timeLimit = Math.max(
+    60,
+    Math.min(300, baseSeconds + complexityAdjustment + Math.max(0, experienceAdjustment / 3))
+  );
+  const minimumSubmissionTime = Math.max(
+    20,
+    Math.min(timeLimit - 10, Math.round(timeLimit * ([0.22, 0.27, 0.33][difficultyWeight] || 0.22)))
+  );
+
+  return { timeLimit, minimumSubmissionTime };
+};
+
 const getRunnerConfig = (language) => {
   switch (language) {
     case "javascript":
@@ -540,13 +630,20 @@ Make questions based on the candidate's role, experience, interview mode, projec
       resumeText: safeResume,
       questions: questionsArray.map((item, index) => {
         const difficulty = ["easy", "easy", "medium", "medium", "hard"][index];
-        const technicalTimeLimits = [180, 240, 300, 360, 480];
-        const hrTimeLimits = [60, 60, 90, 90, 120];
+        const { timeLimit, minimumSubmissionTime } = calculateTimePlan({
+          mode,
+          question: item.question,
+          difficulty,
+          questionType: item.questionType || "discussion",
+          requiresCode: Boolean(item.requiresCode),
+          experience,
+        });
 
         return {
           question: item.question,
           difficulty,
-          timeLimit: mode === "Technical" ? technicalTimeLimits[index] : hrTimeLimits[index],
+          timeLimit,
+          minimumSubmissionTime,
           requiresCode: Boolean(item.requiresCode),
           questionType: item.questionType || "discussion",
           starterCode: item.starterCode || "",
@@ -569,7 +666,21 @@ export const submitAnswer = async (req, res) => {
     const { interviewId, questionIndex, answer, timeTaken, code, language, explanation } = req.body
 
     const interview = await Interview.findById(interviewId)
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found." });
+    }
+
     const question = interview.questions[questionIndex]
+    if (!question) {
+      return res.status(404).json({ message: "Question not found." });
+    }
+
+    const safeTimeTaken = Math.max(0, Math.round(Number(timeTaken) || 0));
+    const minimumSubmissionTime = Math.max(0, question.minimumSubmissionTime || 0);
+    const submittedTooEarly = safeTimeTaken > 0 && safeTimeTaken < minimumSubmissionTime;
+    const timingFlag = submittedTooEarly
+      ? `Submitted after ${safeTimeTaken}s, below the ${minimumSubmissionTime}s minimum review threshold.`
+      : "";
 
     const hasTextAnswer = Boolean(answer?.trim());
     const hasCodeAnswer = Boolean(code?.trim());
@@ -581,6 +692,9 @@ export const submitAnswer = async (req, res) => {
       question.code = "";
       question.language = language || question.language || "javascript";
       question.explanation = explanation || "";
+       question.submittedAtSeconds = safeTimeTaken;
+       question.submittedTooEarly = false;
+       question.timingFlag = "";
 
       await interview.save();
 
@@ -589,13 +703,16 @@ export const submitAnswer = async (req, res) => {
       });
     }
 
-    if (timeTaken > question.timeLimit && interview.mode !== "Technical") {
+    if (safeTimeTaken > question.timeLimit && interview.mode !== "Technical") {
       question.score = 0;
       question.feedback = "Time limit exceeded. Answer not evaluated.";
       question.answer = answer;
       question.code = code || "";
       question.language = language || question.language || "javascript";
       question.explanation = explanation || answer || "";
+      question.submittedAtSeconds = safeTimeTaken;
+      question.submittedTooEarly = false;
+      question.timingFlag = "";
 
       await interview.save();
 
@@ -682,22 +799,139 @@ ${answer || "No answer text submitted"}
     const aiResponse = await askAi(messages)
     const parsed = parseAiJson(aiResponse);
 
+    const feedbackWithTimingFlag = submittedTooEarly
+      ? `${parsed.feedback} Submitted unusually early, so this response was flagged for reviewer attention.`
+      : parsed.feedback;
+
     question.answer = answer;
     question.code = code || "";
     question.language = language || question.language || "javascript";
     question.explanation = explanation || answer || "";
+    question.submittedAtSeconds = safeTimeTaken;
+    question.submittedTooEarly = submittedTooEarly;
+    question.timingFlag = timingFlag;
     question.confidence = parsed.confidence;
     question.communication = parsed.communication;
     question.correctness = parsed.correctness;
     question.score = parsed.finalScore;
-    question.feedback = parsed.feedback;
+    question.feedback = feedbackWithTimingFlag;
     await interview.save();
 
-    return res.status(200).json({feedback :parsed.feedback})
+    return res.status(200).json({
+      feedback: feedbackWithTimingFlag,
+      submittedTooEarly,
+      minimumSubmissionTime,
+      timeTaken: safeTimeTaken,
+    })
   } catch (error) {
     return res.status(500).json({message:`failed to submit answer ${error}`})
   }
 }
+
+const recalculateProctoringSummary = (warnings = []) => {
+  const warningCount = warnings.length;
+  const activeWarnings = warnings.filter((warning) => warning.status === "active");
+  const activeCount = activeWarnings.length;
+  const lastEventAt = warnings.length
+    ? warnings.reduce((latest, warning) => {
+        const candidate = warning.endedAt || warning.startedAt;
+        if (!latest || new Date(candidate) > new Date(latest)) {
+          return candidate;
+        }
+        return latest;
+      }, null)
+    : null;
+
+  // Risk should primarily represent what is happening right now, not linger
+  // at a high score after the frame returns to normal.
+  const activeRisk = activeWarnings.reduce((total, warning) => {
+    const base = warning.severity === "high" ? 28 : 16;
+    const liveDurationMs = Math.max(0, Date.now() - new Date(warning.startedAt).getTime());
+    const durationFactor = Math.min(liveDurationMs / 4000, 3);
+    return total + base + durationFactor * 8;
+  }, 0);
+
+  const resolvedWarnings = warnings.filter((warning) => warning.status !== "active");
+  const historyBump = Math.min(
+    resolvedWarnings.reduce((total, warning) => {
+      const perEvent = warning.severity === "high" ? 3 : 1.5;
+      return total + perEvent;
+    }, 0),
+    12
+  );
+
+  return {
+    warningCount,
+    activeCount,
+    riskScore: activeCount > 0 ? Math.min(100, Math.round(activeRisk + historyBump)) : 0,
+    lastEventAt,
+  };
+};
+
+export const logProctoringEvent = async (req, res) => {
+  try {
+    const {
+      interviewId,
+      eventId,
+      type,
+      label,
+      message,
+      severity = "medium",
+      status = "active",
+      startedAt,
+      endedAt = null,
+      durationMs = 0,
+      confidence = 0,
+      meta = {},
+    } = req.body;
+
+    if (!interviewId || !eventId || !type || !startedAt) {
+      return res.status(400).json({ message: "Missing proctoring event details." });
+    }
+
+    const interview = await Interview.findById(interviewId);
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found." });
+    }
+
+    const warnings = interview.proctoring?.warnings || [];
+    const existingIndex = warnings.findIndex((warning) => warning.eventId === eventId);
+    const payload = {
+      eventId,
+      type,
+      label: label || type,
+      message: message || "",
+      severity: severity === "high" ? "high" : "medium",
+      status: status === "resolved" ? "resolved" : "active",
+      startedAt,
+      endedAt: status === "resolved" ? endedAt : null,
+      durationMs: status === "resolved" ? durationMs || 0 : 0,
+      confidence,
+      meta,
+    };
+
+    if (existingIndex >= 0) {
+      warnings[existingIndex] = {
+        ...warnings[existingIndex].toObject?.(),
+        ...payload,
+      };
+    } else {
+      warnings.push(payload);
+    }
+
+    interview.proctoring = {
+      warnings,
+      summary: recalculateProctoringSummary(warnings),
+    };
+
+    await interview.save();
+
+    return res.status(200).json(interview.proctoring.summary);
+  } catch (error) {
+    return res.status(500).json({ message: `failed to log proctoring event ${error}` });
+  }
+}
+
 export const finishInterview = async (req,res) => {
   try {
     const {interviewId} = req.body
@@ -735,6 +969,7 @@ export const finishInterview = async (req,res) => {
       confidence: Number(avgConfidence.toFixed(1)),
       communication: Number(avgCommunication.toFixed(1)),
       correctness: Number(avgCorrectness.toFixed(1)),
+      proctoring: interview.proctoring || { warnings: [], summary: { warningCount: 0, activeCount: 0, riskScore: 0, lastEventAt: null } },
       questionWiseScore: interview.questions.map((q) => ({
         question: q.question,
         score: q.score || 0,
@@ -742,6 +977,11 @@ export const finishInterview = async (req,res) => {
         confidence: q.confidence || 0,
         communication: q.communication || 0,
         correctness: q.correctness || 0,
+        timeLimit: q.timeLimit || 0,
+        minimumSubmissionTime: q.minimumSubmissionTime || 0,
+        submittedAtSeconds: q.submittedAtSeconds || 0,
+        submittedTooEarly: Boolean(q.submittedTooEarly),
+        timingFlag: q.timingFlag || "",
       })),
     })
   } catch (error) {
@@ -790,6 +1030,7 @@ export const getInterviewReport = async (req,res) => {
       confidence: Number(avgConfidence.toFixed(1)),
       communication: Number(avgCommunication.toFixed(1)),
       correctness: Number(avgCorrectness.toFixed(1)),
+      proctoring: interview.proctoring || { warnings: [], summary: { warningCount: 0, activeCount: 0, riskScore: 0, lastEventAt: null } },
       questionWiseScore: interview.questions
     });
 

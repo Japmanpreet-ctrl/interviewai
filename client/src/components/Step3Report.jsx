@@ -23,7 +23,10 @@ function Step3Report({ report }) {
     communication = 0,
     correctness = 0,
     questionWiseScore = [],
+    proctoring = {},
   } = report;
+  const proctoringSummary = proctoring.summary || {};
+  const proctoringWarnings = proctoring.warnings || [];
 
   const questionScoreData = questionWiseScore.map((score, index) => ({
     name: `Q${index + 1}`,
@@ -266,6 +269,34 @@ function Step3Report({ report }) {
 
           </motion.div>
 
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className='bg-white rounded-2xl sm:rounded-3xl shadow-lg p-6 sm:p-8'>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-6">
+              Proctoring Summary
+            </h3>
+
+            <div className='space-y-4'>
+              <div className='flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3'>
+                <span className='text-sm text-gray-500'>Risk score</span>
+                <span className='text-lg font-semibold text-gray-800'>{proctoringSummary.riskScore || 0}/100</span>
+              </div>
+              <div className='flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3'>
+                <span className='text-sm text-gray-500'>Warnings logged</span>
+                <span className='text-lg font-semibold text-gray-800'>{proctoringSummary.warningCount || 0}</span>
+              </div>
+              <div className='flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3'>
+                <span className='text-sm text-gray-500'>Active at finish</span>
+                <span className='text-lg font-semibold text-gray-800'>{proctoringSummary.activeCount || 0}</span>
+              </div>
+            </div>
+
+            <p className='mt-4 text-xs leading-relaxed text-gray-500'>
+              Proctoring warnings are signals for review, not a final cheating verdict.
+            </p>
+          </motion.div>
+
 
         </div>
 
@@ -349,6 +380,36 @@ function Step3Report({ report }) {
             </div>
 
           </motion.div>
+
+          {proctoringWarnings.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className='bg-white rounded-2xl sm:rounded-3xl shadow-lg p-5 sm:p-8'>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-6">
+                Proctoring Events
+              </h3>
+              <div className='space-y-4'>
+                {proctoringWarnings.map((warning, index) => (
+                  <div key={warning.eventId || index} className='rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4'>
+                    <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                      <div>
+                        <p className='text-sm font-semibold text-gray-800'>{warning.label || warning.type}</p>
+                        <p className='mt-1 text-sm text-gray-600'>{warning.message || "Monitoring event recorded."}</p>
+                      </div>
+                      <div className={`rounded-full px-3 py-1 text-xs font-semibold w-fit ${warning.severity === "high" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>
+                        {warning.severity || "medium"}
+                      </div>
+                    </div>
+                    <div className='mt-3 flex flex-wrap gap-2 text-xs text-gray-500'>
+                      <span className='rounded-full bg-white px-3 py-1'>Status: {warning.status || "resolved"}</span>
+                      <span className='rounded-full bg-white px-3 py-1'>Duration: {Math.round((warning.durationMs || 0) / 1000)}s</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
 
 
