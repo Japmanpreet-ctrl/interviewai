@@ -19,21 +19,21 @@ function CodeEditorPanel({
   const currentRunSupport = quickRunSupport[language] || quickRunSupport.javascript;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
-      <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#ffffff,_#f8fafc)] px-5 py-4">
+    <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-950">
+      <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#ffffff,_#f8fafc)] px-5 py-4 dark:border-slate-800 dark:bg-[linear-gradient(180deg,_#0f172a,_#020617)]">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-emerald-500 dark:text-slate-950">
               <FaCode size={16} />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-semibold text-slate-950">Code Workspace</h3>
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${currentRunSupport.available ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+                <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-50">Code Workspace</h3>
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${currentRunSupport.available ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300"}`}>
                   {currentRunSupport.label}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">{currentRunSupport.description}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{currentRunSupport.description}</p>
             </div>
           </div>
 
@@ -49,14 +49,14 @@ function CodeEditorPanel({
             <button
               type="button"
               onClick={onResetTemplate}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               <FaRotateLeft size={12} /> Reset
             </button>
             <button
               type="button"
               onClick={onToggleOutput}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               {showOutput ? <FaRegEyeSlash size={12} /> : <FaRegEye size={12} />} {showOutput ? "Hide Output" : "Show Output"}
             </button>
@@ -69,7 +69,7 @@ function CodeEditorPanel({
               key={item.value}
               type="button"
               onClick={() => onLanguageChange(item.value)}
-              className={`rounded-full border px-3 py-2 text-sm transition ${language === item.value ? "border-slate-950 bg-slate-950 font-semibold text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
+              className={`rounded-full border px-3 py-2 text-sm transition ${language === item.value ? "border-slate-950 bg-slate-950 font-semibold text-white dark:border-emerald-500 dark:bg-emerald-500 dark:text-slate-950" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"}`}
             >
               {item.label}
             </button>

@@ -31,14 +31,16 @@ function App() {
   }, [dispatch])
 
   return (
-    <Routes>
-      <Route path='/' element={<Home />} />
-      <Route path='/auth' element={<Auth />} />
-      <Route path='/interview' element={<InterviewPage />} />
-      <Route path='/history' element={<InterviewHistory />} />
-      <Route path='/pricing' element={<Pricing />} />
-      <Route path='/report/:id' element={<InterviewReport />} />
-    </Routes>
+    <div className='min-h-screen text-slate-900 transition-colors dark:text-slate-100'>
+      <Routes>
+        <Route path='/' element={<Home />} />
+        <Route path='/auth' element={<Auth />} />
+        <Route path='/interview' element={<InterviewPage />} />
+        <Route path='/history' element={<InterviewHistory />} />
+        <Route path='/pricing' element={<Pricing />} />
+        <Route path='/report/:id' element={<InterviewReport />} />
+      </Routes>
+    </div>
   )
 }
 

@@ -7,6 +7,7 @@ import 'react-circular-progressbar/dist/styles.css';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import ThemeToggle from './ThemeToggle'
 
 function Step3Report({ report }) {
   if (!report) {
@@ -175,25 +176,34 @@ function Step3Report({ report }) {
 };
 
   return (
-    <div className='min-h-screen bg-linear-to-br from-gray-50 to-green-50 px-4 sm:px-6 lg:px-10 py-8'>
-      <div className='mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
+    <div className='min-h-screen bg-transparent px-4 py-8 sm:px-6 lg:px-10'>
+      <div className='mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
         <div className='md:mb-10 w-full flex items-start gap-4 flex-wrap'>
           <button
             onClick={() => navigate("/history")}
-            className='mt-1 p-3 rounded-full bg-white shadow hover:shadow-md transition'><FaArrowLeft className='text-gray-600' /></button>
+            className='mt-1 rounded-full bg-white/88 p-3 shadow transition hover:shadow-md dark:bg-slate-900/88'><FaArrowLeft className='text-slate-600 dark:text-slate-200' /></button>
 
           <div>
-            <h1 className='text-3xl font-bold flex-nowrap text-gray-800'>
+            <h1 className='text-3xl font-bold flex-nowrap text-slate-900 dark:text-slate-50'>
               Interview Analytics Dashboard
             </h1>
-            <p className='text-gray-500 mt-2'>
+            <p className='mt-2 text-slate-500 dark:text-slate-300'>
               AI-powered performance insights
             </p>
 
           </div>
         </div>
 
-        <button onClick={downloadPDF} className='bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 font-semibold text-sm sm:text-base text-nowrap'>Download PDF</button>
+        <div className='flex items-center gap-3 self-end sm:self-auto'>
+          <ThemeToggle />
+          <button
+            onClick={() => navigate("/")}
+            className='rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 sm:text-base'
+          >
+            Exit
+          </button>
+          <button onClick={downloadPDF} className='bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 font-semibold text-sm sm:text-base text-nowrap'>Download PDF</button>
+        </div>
       </div>
 
 
@@ -203,9 +213,9 @@ function Step3Report({ report }) {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="bg-white rounded-2xl sm:rounded-3xl shadow-lg p-6 sm:p-8 text-center">
+            className="rounded-2xl bg-white/88 p-6 text-center shadow-lg dark:bg-slate-900/88 sm:rounded-3xl sm:p-8">
 
-            <h3 className="text-gray-500 mb-4 sm:mb-6 text-sm sm:text-base">
+            <h3 className="mb-4 text-sm text-slate-500 dark:text-slate-300 sm:mb-6 sm:text-base">
               Overall Performance
             </h3>
             <div className='relative w-20 h-20 sm:w-25 sm:h-25 mx-auto'>
@@ -221,15 +231,15 @@ function Step3Report({ report }) {
               />
             </div>
 
-            <p className="text-gray-400 mt-3 text-xs sm:text-sm">
+            <p className="mt-3 text-xs text-slate-400 dark:text-slate-500 sm:text-sm">
               Out of 10
             </p>
 
             <div className="mt-4">
-              <p className="font-semibold text-gray-800 text-sm sm:text-base">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-50 sm:text-base">
                 {performanceText}
               </p>
-              <p className="text-gray-500 text-xs sm:text-sm mt-1">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-300 sm:text-sm">
                 {shortTagline}
               </p>
             </div>

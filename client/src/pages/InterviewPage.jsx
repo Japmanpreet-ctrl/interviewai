@@ -4,6 +4,7 @@ import { FaArrowLeft, FaCheck } from 'react-icons/fa'
 import Step1SetUp from '../components/Step1SetUp'
 import Step2Interview from '../components/Step2Interview'
 import Step3Report from '../components/Step3Report'
+import ThemeToggle from '../components/ThemeToggle'
 
 function InterviewPage() {
     const [step, setStep] = useState(1)
@@ -25,17 +26,17 @@ function InterviewPage() {
     }
 
     return (
-        <div className='min-h-screen bg-gray-50'>
-            <div className='sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur'>
+        <div className='min-h-screen bg-transparent'>
+            <div className='sticky top-0 z-20 border-b border-white/60 bg-white/75 backdrop-blur dark:border-slate-800 dark:bg-slate-950/75'>
                 <div className='mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6'>
                     <button
                         onClick={handleBack}
-                        className='inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50'
+                        className='inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
                     >
                         <FaArrowLeft size={12} /> {step === 1 ? 'Back Home' : 'Previous Step'}
                     </button>
 
-                    <div className='flex items-center gap-2 sm:gap-3'>
+                    <div className='flex items-center gap-3 sm:gap-4'>
                         {steps.map((item) => {
                             const isActive = step === item.id
                             const isDone = step > item.id
@@ -43,8 +44,8 @@ function InterviewPage() {
                                 ? 'bg-emerald-600 text-white shadow'
                                 : isDone
                                     ? 'bg-emerald-100 text-emerald-700'
-                                    : 'bg-gray-100 text-gray-500'
-                            const labelClass = isActive ? 'text-gray-900' : 'text-gray-500'
+                                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
+                            const labelClass = isActive ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 dark:text-slate-300'
 
                             return (
                                 <div key={item.id} className='flex items-center gap-2'>
@@ -52,10 +53,11 @@ function InterviewPage() {
                                         {isDone ? <FaCheck size={12} /> : item.id}
                                     </div>
                                     <span className={`hidden text-sm font-medium sm:block ${labelClass}`}>{item.label}</span>
-                                    {item.id !== steps.length && <div className='hidden h-px w-8 bg-gray-200 sm:block' />}
+                                    {item.id !== steps.length && <div className='hidden h-px w-8 bg-slate-200 dark:bg-slate-700 sm:block' />}
                                 </div>
                             )
                         })}
+                        <ThemeToggle className='ml-2' />
                     </div>
                 </div>
             </div>

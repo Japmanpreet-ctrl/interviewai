@@ -217,6 +217,30 @@ const normalizeQuestionSignature = (value = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
+const getQuestionTokens = (value = "") =>
+  normalizeQuestionSignature(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2);
+
+const calculateTokenSimilarity = (left = "", right = "") => {
+  const leftTokens = new Set(getQuestionTokens(left));
+  const rightTokens = new Set(getQuestionTokens(right));
+
+  if (!leftTokens.size || !rightTokens.size) {
+    return 0;
+  }
+
+  let intersectionCount = 0;
+  leftTokens.forEach((token) => {
+    if (rightTokens.has(token)) {
+      intersectionCount += 1;
+    }
+  });
+
+  return intersectionCount / Math.max(leftTokens.size, rightTokens.size);
+};
+
 const hasQuestionOverlap = (questionText = "", seenSignatures = new Set()) => {
   const normalized = normalizeQuestionSignature(questionText);
   if (!normalized) {
@@ -235,10 +259,11 @@ const hasQuestionOverlap = (questionText = "", seenSignatures = new Set()) => {
   }
 
   for (const signature of seenSignatures) {
-    if (
-      signature.includes(normalizedCore) ||
-      normalized.includes(signature)
-    ) {
+    if (signature === normalized || (normalizedCore && signature === normalizedCore)) {
+      return true;
+    }
+
+    if (calculateTokenSimilarity(normalized, signature) >= 0.9) {
       return true;
     }
   }
@@ -318,6 +343,89 @@ Question 6 -> hard
 PREVIOUS_QUESTIONS:
 ${previousQuestionsText}
 `;
+
+const createStarterCodeFromPrompt = (questionText = "") => {
+  const lower = questionText.toLowerCase();
+
+  if (lower.includes("debug") || lower.includes("fix") || lower.includes("bug")) {
+    return `function solve(input) {\n  for (let index = 0; index <= input.length; index += 1) {\n    if (input[index] > 0) {\n      return input[index];\n    }\n  }\n\n  return -1;\n}\n`;
+  }
+
+  return `function solve(input) {\n  // implement your solution here\n  return input;\n}\n`;
+};
+
+const buildFallbackQuestions = ({ mode, role, projects = [], seenSignatures }) => {
+  const topProject = projects[0] || "one project from your resume";
+  const secondProject = projects[1] || projects[0] || "another project from your resume";
+
+  if (mode !== "Technical") {
+    const hrCandidates = [
+      { category: "role_based", question: `Tell me about a time you had to make a difficult tradeoff while working as a ${role}.` },
+      { category: "role_based", question: `How do you prioritize tasks when multiple stakeholders need different outcomes from you in the same week?` },
+      { category: "project_based", question: `Walk me through the most important problem you solved in ${topProject} and how you approached it.` },
+      { category: "project_based", question: `What would you improve if you had to rebuild ${secondProject} today with what you know now?` },
+      { category: "behavioral", question: `Describe a time you received critical feedback and how you responded to it professionally.` },
+      { category: "behavioral", question: `Tell me about a moment when you had to handle ambiguity and still deliver a strong outcome.` },
+    ];
+
+    return hrCandidates
+      .filter((item) => !hasQuestionOverlap(item.question, seenSignatures))
+      .slice(0, QUESTION_COUNT)
+      .map((item) => ({
+        ...item,
+        requiresCode: false,
+        questionType: "discussion",
+        starterCode: "",
+      }));
+  }
+
+  const technicalCandidates = [
+    {
+      category: "role_based",
+      question: `Write a function to solve a realistic ${role} array or string optimization problem with edge-case handling.`,
+      requiresCode: true,
+      questionType: "coding",
+    },
+    {
+      category: "role_based",
+      question: `Implement a hash-map or graph based problem that demonstrates strong DSA fundamentals expected from a ${role}.`,
+      requiresCode: true,
+      questionType: "coding",
+    },
+    {
+      category: "project_based",
+      question: `Based on ${topProject}, implement one core function that reflects the main technical challenge you solved there.`,
+      requiresCode: true,
+      questionType: "coding",
+    },
+    {
+      category: "project_based",
+      question: `Using ${secondProject} as context, write code for a critical component you would expect to own in production.`,
+      requiresCode: true,
+      questionType: "coding",
+    },
+    {
+      category: "behavioral",
+      question: `Tell me about a time you made a technical decision under pressure and how you explained the tradeoff to your team.`,
+      requiresCode: false,
+      questionType: "discussion",
+    },
+    {
+      category: "behavioral",
+      question: `Describe a situation where your first implementation approach failed and what you changed to recover successfully.`,
+      requiresCode: false,
+      questionType: "discussion",
+    },
+  ];
+
+  return technicalCandidates
+    .filter((item) => !hasQuestionOverlap(item.question, seenSignatures))
+    .slice(0, QUESTION_COUNT)
+    .map((item) => ({
+      ...item,
+      starterCode: item.requiresCode ? createStarterCodeFromPrompt(item.question) : "",
+    }));
+};
 
 const hasRequiredTechnicalMix = (questions = []) => {
   const counts = questions.reduce((total, item) => {
@@ -710,7 +818,10 @@ export const generateQuestion = async (req, res) => {
     const previousInterviews = await Interview.find({
       userId: user._id,
       resumeText: safeResume,
-    }).select("questions.question");
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("questions.question");
 
     const previousQuestionSignatures = new Set();
     const previousQuestionList = [];
@@ -885,9 +996,20 @@ ResumeFingerprint:${resumeFingerprint}
     }
 
     if (questionsArray.length !== QUESTION_COUNT) {
-      return res.status(500).json({
-        message: "AI failed to generate 6 unique questions for this resume. Please try again."
+      const fallbackQuestions = buildFallbackQuestions({
+        mode,
+        role,
+        projects: Array.isArray(projects) ? projects : [],
+        seenSignatures: previousQuestionSignatures,
       });
+
+      if ((mode === "Technical" && hasRequiredTechnicalMix(fallbackQuestions)) || (mode !== "Technical" && hasRequiredHrMix(fallbackQuestions))) {
+        questionsArray = fallbackQuestions;
+      } else {
+        return res.status(500).json({
+          message: "AI failed to generate 6 unique questions for this resume. Please try again."
+        });
+      }
     }
 
     user.credits -= 50;
