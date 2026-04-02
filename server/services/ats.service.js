@@ -11,10 +11,65 @@ const STOP_WORDS = new Set([
 
 const clampScore = (value) => Math.max(0, Math.min(100, Math.round(value || 0)));
 
+const extractFirstJsonValue = (value = "") => {
+  const startIndex = value.search(/[\[{]/);
+
+  if (startIndex === -1) {
+    return value;
+  }
+
+  const opening = value[startIndex];
+  const closing = opening === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < value.length; index += 1) {
+    const char = value[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === opening) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return value.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return value;
+};
+
 const safeJsonParse = (value) => {
   const trimmed = value?.trim?.() || "";
-  const withoutFences = trimmed.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(withoutFences);
+  const withoutFences = trimmed.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(extractFirstJsonValue(withoutFences));
 };
 
 const normalizeText = (value = "") =>
@@ -144,7 +199,7 @@ Rules:
     }
   ];
 
-  const aiResponse = await askAi(messages);
+  const aiResponse = await askAi(messages, "openai/gpt-4o-mini");
   const parsed = safeJsonParse(aiResponse);
 
   return {

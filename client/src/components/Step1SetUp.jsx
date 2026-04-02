@@ -23,6 +23,7 @@ function Step1SetUp({ onStart }) {
     const [role, setRole] = useState("");
     const [experience, setExperience] = useState("");
     const [mode, setMode] = useState("Technical");
+    const [voicePreference, setVoicePreference] = useState("female");
     const [resumeFile, setResumeFile] = useState(null);
     const [loading, setLoading] = useState(false);
     const [projects, setProjects] = useState([]);
@@ -118,7 +119,7 @@ function Step1SetUp({ onStart }) {
             if (userData) {
                 dispatch(setUserData({ ...userData, credits: result.data.creditsLeft }))
             }
-            onStart({ ...result.data, mode })
+            onStart({ ...result.data, mode, voicePreference })
         } catch (error) {
             console.log(error)
             const message = getErrorMessage(error, "Interview could not start.")
@@ -242,6 +243,15 @@ function Step1SetUp({ onStart }) {
                         className='w-full py-3 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none transition'>
                         <option value="Technical">Technical Interview</option>
                         <option value="HR">HR Interview</option>
+                    </select>
+
+                    <select
+                        value={voicePreference}
+                        onChange={(e) => setVoicePreference(e.target.value)}
+                        className='w-full py-3 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none transition'
+                    >
+                        <option value="female">AI Voice: Female</option>
+                        <option value="male">AI Voice: Male</option>
                     </select>
 
                     <div className='grid md:grid-cols-2 gap-4'>

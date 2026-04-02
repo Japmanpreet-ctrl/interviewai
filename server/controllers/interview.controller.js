@@ -10,6 +10,72 @@ import Interview from "../models/interview.model.js";
 const QUICK_RUN_TIMEOUT_MS = 5000;
 const MAX_OUTPUT_LENGTH = 12000;
 
+const extractFirstJsonValue = (value = "") => {
+  const startIndex = value.search(/[\[{]/);
+
+  if (startIndex === -1) {
+    return value;
+  }
+
+  const opening = value[startIndex];
+  const closing = opening === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < value.length; index += 1) {
+    const char = value[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === opening) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return value.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return value;
+};
+
+const parseAiJson = (value) => {
+  const trimmed = value?.trim?.() || "";
+  const withoutFences = trimmed
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  return JSON.parse(extractFirstJsonValue(withoutFences));
+};
+
 const clipOutput = (value = "") => {
   if (value.length <= MAX_OUTPUT_LENGTH) {
     return value;
@@ -190,8 +256,8 @@ Return strictly JSON:
       }
     ];
 
-    const aiResponse = await askAi(messages)
-    const parsed = JSON.parse(aiResponse);
+    const aiResponse = await askAi(messages, "openai/gpt-4o-mini")
+    const parsed = parseAiJson(aiResponse);
 
     fs.unlinkSync(filepath)
 
@@ -302,13 +368,13 @@ export const generateQuestion = async (req, res) => {
     const safeResume = resumeText?.trim() || "None";
 
     const userPrompt = `
-    Role:${role}
-    Experience:${experience}
-    InterviewMode:${mode}
-    Projects:${projectText}
-    Skills:${skillsText},
-    Resume:${safeResume}
-    `;
+Role:${role}
+Experience:${experience}
+InterviewMode:${mode}
+Projects:${projectText}
+Skills:${skillsText}
+Resume:${safeResume}
+`;
 
     if (!userPrompt.trim()) {
       return res.status(400).json({
@@ -316,10 +382,33 @@ export const generateQuestion = async (req, res) => {
       });
     }
 
-    const messages = [
-      {
-        role: "system",
-        content: `
+    const questionSystemPrompt = mode === "Technical"
+      ? `
+You are a senior software engineer designing a realistic technical interview.
+
+Return ONLY valid JSON as an array with exactly 5 items.
+Each item must follow this exact shape:
+{
+  "question": "string",
+  "requiresCode": true,
+  "questionType": "coding" | "debugging" | "discussion",
+  "starterCode": "string"
+}
+
+Rules for technical interviews:
+- At least 3 of the 5 questions must require code.
+- Include a mix of implementation, debugging, reasoning, edge cases, and tradeoff discussion.
+- Make the questions role-specific using the candidate's projects, skills, resume, and experience.
+- Avoid generic HR phrasing.
+- Questions should become harder across the interview.
+- Each question should sound like something a real interviewer would ask.
+- Keep each question to one sentence.
+- For debugging questions, starterCode must contain a short buggy JavaScript snippet relevant to the question.
+- For coding questions, starterCode may contain a JavaScript function signature or a tiny scaffold.
+- For discussion questions, starterCode must be an empty string.
+- Do not wrap the JSON in markdown fences.
+`
+      : `
 You are a real human interviewer conducting a professional interview.
 
 Speak in simple, natural English as if you are directly talking to the candidate.
@@ -337,14 +426,19 @@ Strict Rules:
 - Questions must feel practical and realistic.
 
 Difficulty progression:
-Question 1 → easy  
-Question 2 → easy  
-Question 3 → medium  
-Question 4 → medium  
-Question 5 → hard  
+Question 1 -> easy
+Question 2 -> easy
+Question 3 -> medium
+Question 4 -> medium
+Question 5 -> hard
 
-Make questions based on the candidate’s role, experience,interviewMode, projects, skills, and resume details.
-`
+Make questions based on the candidate's role, experience, interview mode, projects, skills, and resume details.
+`;
+
+    const messages = [
+      {
+        role: "system",
+        content: questionSystemPrompt
       },
       {
         role: "user",
@@ -360,11 +454,74 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
       });
     }
 
-    const questionsArray = aiResponse
-      .split("\n")
-      .map(q => q.trim())
-      .filter(q => q.length > 0)
-      .slice(0, 5);
+    const inferTechnicalType = (questionText = "") => {
+      const lower = questionText.toLowerCase();
+      if (lower.includes("debug") || lower.includes("fix") || lower.includes("broken") || lower.includes("bug")) {
+        return "debugging";
+      }
+      if (lower.includes("write") || lower.includes("implement") || lower.includes("code") || lower.includes("algorithm") || lower.includes("function")) {
+        return "coding";
+      }
+      return "discussion";
+    };
+
+    const inferRequiresCode = (questionText = "", questionType = "discussion") => {
+      if (questionType === "coding" || questionType === "debugging") return true;
+      const lower = questionText.toLowerCase();
+      return lower.includes("write") || lower.includes("implement") || lower.includes("code") || lower.includes("debug") || lower.includes("fix");
+    };
+
+    let questionsArray = [];
+
+    if (mode === "Technical") {
+      let questionDrafts = [];
+
+      try {
+        const parsed = parseAiJson(aiResponse);
+        questionDrafts = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.questions) ? parsed.questions : [];
+      } catch {
+        questionDrafts = aiResponse
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(0, 5)
+          .map((question) => ({
+            question,
+            requiresCode: inferRequiresCode(question),
+            questionType: inferTechnicalType(question),
+            starterCode: "",
+          }));
+      }
+
+      questionsArray = questionDrafts
+        .filter((item) => item && typeof item.question === "string")
+        .slice(0, 5)
+        .map((item) => {
+          const question = item.question.trim();
+          const questionType = ["coding", "debugging", "discussion"].includes(item.questionType)
+            ? item.questionType
+            : inferTechnicalType(question);
+
+          return {
+            question,
+            requiresCode: typeof item.requiresCode === "boolean" ? item.requiresCode : inferRequiresCode(question, questionType),
+            questionType,
+            starterCode: typeof item.starterCode === "string" ? item.starterCode.trim() : "",
+          };
+        });
+    } else {
+      questionsArray = aiResponse
+        .split("\n")
+        .map((q) => q.trim())
+        .filter((q) => q.length > 0)
+        .slice(0, 5)
+        .map((question) => ({
+          question,
+          requiresCode: false,
+          questionType: "discussion",
+          starterCode: "",
+        }));
+    }
 
     if (questionsArray.length === 0) {
       return res.status(500).json({
@@ -381,15 +538,18 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
       experience,
       mode,
       resumeText: safeResume,
-      questions: questionsArray.map((q, index) => {
+      questions: questionsArray.map((item, index) => {
         const difficulty = ["easy", "easy", "medium", "medium", "hard"][index];
         const technicalTimeLimits = [180, 240, 300, 360, 480];
         const hrTimeLimits = [60, 60, 90, 90, 120];
 
         return {
-          question: q,
+          question: item.question,
           difficulty,
           timeLimit: mode === "Technical" ? technicalTimeLimits[index] : hrTimeLimits[index],
+          requiresCode: Boolean(item.requiresCode),
+          questionType: item.questionType || "discussion",
+          starterCode: item.starterCode || "",
         };
       })
     })
@@ -404,7 +564,6 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
     return res.status(500).json({message:`failed to create interview ${error}`})
   }
 }
-
 export const submitAnswer = async (req, res) => {
   try {
     const { interviewId, questionIndex, answer, timeTaken, code, language, explanation } = req.body
@@ -445,43 +604,11 @@ export const submitAnswer = async (req, res) => {
       });
     }
 
-    const messages = [
-      {
-        role: "system",
-        content: `
-You are a professional human interviewer evaluating a candidate's answer in a real interview.
-
-Evaluate naturally and fairly, like a real person would.
-
-Score the answer in these areas (0 to 10):
-
-1. Confidence – Does the answer sound clear, confident, and well-presented?
-2. Communication – Is the explanation simple, clear, and easy to understand?
-3. Correctness – Is the answer or code accurate, relevant, and complete?
-
-If interview mode is Technical, evaluate both the explanation and submitted code. Reward clean structure, reasonable logic, and language-appropriate syntax even if the solution is not perfect.
-
-Rules:
-- Be realistic and unbiased.
-- Do not give random high scores.
-- If the answer is weak, score low.
-- If the answer is strong and detailed, score high.
-- Consider clarity, structure, and relevance.
-
-Calculate:
-finalScore = average of confidence, communication, and correctness (rounded to nearest whole number).
-
-Feedback Rules:
-- Write natural human feedback.
-- 10 to 15 words only.
-- Sound like real interview feedback.
-- Can suggest improvement if needed.
-- Do NOT repeat the question.
-- Do NOT explain scoring.
-- Keep tone professional and honest.
+    const evaluationSystemPrompt = interview.mode === "Technical"
+      ? `
+You are a senior engineer evaluating a candidate's technical interview answer.
 
 Return ONLY valid JSON in this format:
-
 {
   "confidence": number,
   "communication": number,
@@ -489,24 +616,71 @@ Return ONLY valid JSON in this format:
   "finalScore": number,
   "feedback": "short human feedback"
 }
+
+Technical interview scoring rules:
+- Evaluate the submitted code directly when code is present.
+- Check whether the code matches the task, the bug-fix request, or the algorithm being asked.
+- Reward correct logic, sensible structure, debugging skill, edge-case awareness, and clear explanation.
+- If the candidate improved a buggy starter snippet, judge whether the bug is truly fixed.
+- If code was expected but not submitted, correctness must stay low unless the reasoning is exceptionally strong.
+- Give partial credit for a strong approach even if the code is incomplete.
+- Do not require perfect syntax for a strong score, but penalize obviously broken logic.
+
+Scoring guidance:
+- 0 to 3: mostly incorrect or missing
+- 4 to 6: partial understanding with notable gaps
+- 7 to 8: strong and mostly correct
+- 9 to 10: excellent and interview-ready
+
+Feedback rules:
+- 14 to 28 words.
+- Mention something specific about the code, debugging, or reasoning quality.
+- Mention one improvement area if needed.
+- Do not mention numeric scores.
 `
+      : `
+You are a professional human interviewer evaluating a candidate's answer in a real interview.
+
+Return ONLY valid JSON in this format:
+{
+  "confidence": number,
+  "communication": number,
+  "correctness": number,
+  "finalScore": number,
+  "feedback": "short human feedback"
+}
+
+Score the answer fairly for confidence, communication, and correctness.
+Keep feedback concise, honest, and natural.
+`;
+
+    const messages = [
+      {
+        role: "system",
+        content: evaluationSystemPrompt
       },
       {
         role: "user",
         content: `
 Interview Mode: ${interview.mode}
+Question Type: ${question.questionType || "discussion"}
+Requires Code: ${question.requiresCode ? "yes" : "no"}
 Question: ${question.question}
 Language: ${language || question.language || "javascript"}
-Explanation: ${explanation || answer}
-Code:
+Starter Code:
+${question.starterCode || "None"}
+Explanation:
+${explanation || answer || "No explanation submitted"}
+Submitted Code:
 ${code || "No code submitted"}
-Answer: ${answer}
+Answer Text:
+${answer || "No answer text submitted"}
 `
       }
     ];
 
     const aiResponse = await askAi(messages)
-    const parsed = JSON.parse(aiResponse);
+    const parsed = parseAiJson(aiResponse);
 
     question.answer = answer;
     question.code = code || "";
@@ -524,7 +698,6 @@ Answer: ${answer}
     return res.status(500).json({message:`failed to submit answer ${error}`})
   }
 }
-
 export const finishInterview = async (req,res) => {
   try {
     const {interviewId} = req.body

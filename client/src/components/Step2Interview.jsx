@@ -9,28 +9,41 @@ import { ServerUrl } from "../App";
 import { BsArrowRight } from "react-icons/bs";
 import { FaCode, FaRegEye, FaRegEyeSlash, FaRegLightbulb } from "react-icons/fa6";
 import CodeEditorPanel from "./CodeEditorPanel";
-import { getCodeTemplate } from "../utils/codeTemplates";
+import { getCodeTemplate, getDebugTemplate } from "../utils/codeTemplates";
 
-const createTechnicalState = () => ({
+const getQuestionStarterCode = (question, language = "javascript") => {
+  if (language === "javascript" && question?.starterCode?.trim()) {
+    return question.starterCode.trim();
+  }
+
+  if (question?.questionType === "debugging") {
+    return getDebugTemplate(language);
+  }
+
+  return getCodeTemplate(language);
+};
+
+const createTechnicalState = (question) => ({
   answer: "",
   language: "javascript",
-  code: getCodeTemplate("javascript"),
+  code: getQuestionStarterCode(question, "javascript"),
   output: "",
   runStatus: "idle",
   isRunning: false,
   showOutput: true,
   languageDrafts: {
-    javascript: getCodeTemplate("javascript"),
-    typescript: getCodeTemplate("typescript"),
-    python: getCodeTemplate("python"),
-    java: getCodeTemplate("java"),
-    cpp: getCodeTemplate("cpp"),
-    go: getCodeTemplate("go"),
+    javascript: getQuestionStarterCode(question, "javascript"),
+    typescript: getQuestionStarterCode(question, "typescript"),
+    python: getQuestionStarterCode(question, "python"),
+    java: getQuestionStarterCode(question, "java"),
+    cpp: getQuestionStarterCode(question, "cpp"),
+    go: getQuestionStarterCode(question, "go"),
+    css: getQuestionStarterCode(question, "css"),
   },
 });
 
 function Step2Interview({ interviewData, onFinish }) {
-  const { interviewId, questions, userName, mode = "Technical" } = interviewData;
+  const { interviewId, questions, userName, mode = "Technical", voicePreference = "female" } = interviewData
   const isTechnicalMode = mode === "Technical";
   const [isIntroPhase, setIsIntroPhase] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -41,13 +54,13 @@ function Step2Interview({ interviewData, onFinish }) {
   const [timeLeft, setTimeLeft] = useState(questions[0]?.timeLimit || 60);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [voiceGender, setVoiceGender] = useState("female");
+  const [voiceGender, setVoiceGender] = useState(voicePreference);
   const [subtitle, setSubtitle] = useState("");
   const videoRef = useRef(null);
-  const [showEditor, setShowEditor] = useState(true);
+  const [showEditor, setShowEditor] = useState(() => isTechnicalMode ? Boolean(questions[0]?.requiresCode) : false);
 
   const [questionStates, setQuestionStates] = useState(
-    questions.map(() => (isTechnicalMode ? createTechnicalState() : { answer: "" }))
+    questions.map((question) => (isTechnicalMode ? createTechnicalState(question) : { answer: "" }))
   );
 
   const currentQuestion = questions[currentIndex];
@@ -71,43 +84,36 @@ function Step2Interview({ interviewData, onFinish }) {
   };
 
   useEffect(() => {
+    const preferredGender = voicePreference === "male" ? "male" : "female";
+
+    const matchesGender = (voice, gender) => {
+      const name = voice.name.toLowerCase();
+      if (gender === "male") {
+        return name.includes("david") || name.includes("mark") || name.includes("male");
+      }
+
+      return name.includes("zira") || name.includes("samantha") || name.includes("female");
+    };
+
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
       if (!voices.length) return;
 
-      const femaleVoice = voices.find(
-        (voice) =>
-          voice.name.toLowerCase().includes("zira") ||
-          voice.name.toLowerCase().includes("samantha") ||
-          voice.name.toLowerCase().includes("female")
-      );
+      const preferredVoice = voices.find((voice) => matchesGender(voice, preferredGender));
+      const fallbackVoice = voices.find((voice) => matchesGender(voice, preferredGender === "male" ? "female" : "male"));
+      const nextVoice = preferredVoice || fallbackVoice || voices[0];
 
-      if (femaleVoice) {
-        setSelectedVoice(femaleVoice);
-        setVoiceGender("female");
-        return;
-      }
-
-      const maleVoice = voices.find(
-        (voice) =>
-          voice.name.toLowerCase().includes("david") ||
-          voice.name.toLowerCase().includes("mark") ||
-          voice.name.toLowerCase().includes("male")
-      );
-
-      if (maleVoice) {
-        setSelectedVoice(maleVoice);
-        setVoiceGender("male");
-        return;
-      }
-
-      setSelectedVoice(voices[1]);
-      setVoiceGender("female");
+      setSelectedVoice(nextVoice);
+      setVoiceGender(preferredVoice ? preferredGender : preferredGender === "male" ? "female" : "male");
     };
 
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
-  }, []);
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, [voicePreference]);
 
   const videoSource = voiceGender === "male" ? maleVideo : femaleVideo;
 
@@ -214,6 +220,11 @@ function Step2Interview({ interviewData, onFinish }) {
   }, [currentIndex, isIntroPhase, currentQuestion]);
 
   useEffect(() => {
+    if (!isTechnicalMode || !currentQuestion) return;
+    setShowEditor(Boolean(currentQuestion.requiresCode));
+  }, [currentIndex, currentQuestion, isTechnicalMode]);
+
+  useEffect(() => {
     if (!("webkitSpeechRecognition" in window)) return;
 
     const recognition = new window.webkitSpeechRecognition();
@@ -243,7 +254,7 @@ function Step2Interview({ interviewData, onFinish }) {
   const handleLanguageChange = (language) => {
     updateCurrentState((state) => ({
       language,
-      code: state.languageDrafts?.[language] || getCodeTemplate(language),
+      code: state.languageDrafts?.[language] || getQuestionStarterCode(currentQuestion, language),
       output: "",
       runStatus: "idle",
     }));
@@ -261,15 +272,19 @@ function Step2Interview({ interviewData, onFinish }) {
   };
 
   const handleResetTemplate = () => {
-    updateCurrentState((state) => ({
-      code: getCodeTemplate(state.language),
-      output: "",
-      runStatus: "idle",
-      languageDrafts: {
-        ...(state.languageDrafts || {}),
-        [state.language]: getCodeTemplate(state.language),
-      },
-    }));
+    updateCurrentState((state) => {
+      const nextTemplate = getQuestionStarterCode(currentQuestion, state.language);
+
+      return {
+        code: nextTemplate,
+        output: "",
+        runStatus: "idle",
+        languageDrafts: {
+          ...(state.languageDrafts || {}),
+          [state.language]: nextTemplate,
+        },
+      };
+    });
   };
 
   const runCode = async () => {
@@ -401,10 +416,15 @@ function Step2Interview({ interviewData, onFinish }) {
               {isTechnicalMode && (
                 <button
                   type="button"
-                  onClick={() => setShowEditor((prev) => !prev)}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => {
+                    if (!currentQuestion?.requiresCode) {
+                      setShowEditor((prev) => !prev)
+                    }
+                  }}
+                  disabled={currentQuestion?.requiresCode}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                  {showEditor ? <FaRegEyeSlash size={14} /> : <FaRegEye size={14} />} {showEditor ? "Hide Editor" : "Show Editor"}
+                  {showEditor ? <FaRegEyeSlash size={14} /> : <FaRegEye size={14} />} {currentQuestion?.requiresCode ? "Workspace Required" : showEditor ? "Hide Editor" : "Open Workspace"}
                 </button>
               )}
             </div>
