@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useSelector } from 'react-redux'
 import { motion } from "motion/react";
@@ -7,11 +7,12 @@ import {
   BsMic,
   BsClock,
   BsBarChart,
-  BsFileEarmarkText
+  BsFileEarmarkText,
+  BsStars,
+  BsArrowRight,
 } from "react-icons/bs";
 import { HiSparkles } from "react-icons/hi";
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
 import AuthModel from '../components/AuthModel';
 import hrImg from "../assets/HR.png";
 import techImg from "../assets/tech.png";
@@ -23,291 +24,425 @@ import pdfImg from "../assets/pdf.png";
 import analyticsImg from "../assets/history.png";
 import Footer from '../components/Footer';
 
+const capabilityCards = [
+  {
+    image: evalImg,
+    icon: <BsBarChart size={18} />,
+    title: "AI Answer Evaluation",
+    desc: "Scores communication, correctness, and confidence with practical feedback after every round.",
+  },
+  {
+    image: resumeImg,
+    icon: <BsFileEarmarkText size={18} />,
+    title: "Resume-Aware Interviews",
+    desc: "Generates role-specific and project-based questions from your resume instead of generic mock prompts.",
+  },
+  {
+    image: pdfImg,
+    icon: <BsStars size={18} />,
+    title: "Executive Reports",
+    desc: "Download polished reports with performance trends, question-by-question feedback, and review-ready insights.",
+  },
+  {
+    image: analyticsImg,
+    icon: <BsBarChart size={18} />,
+    title: "History & Analytics",
+    desc: "Track improvement across sessions and revisit interviews with detailed scoring and progress data.",
+  },
+];
+
+const processCards = [
+  {
+    icon: <BsRobot size={22} />,
+    step: "01",
+    title: "Role-Aligned Setup",
+    desc: "Choose your target role, experience, and resume context so the interview reflects real expectations.",
+  },
+  {
+    icon: <BsMic size={22} />,
+    step: "02",
+    title: "Guided Live Interview",
+    desc: "Practice with time pressure, speaking flow, coding prompts, and interview-style follow-through.",
+  },
+  {
+    icon: <BsClock size={22} />,
+    step: "03",
+    title: "Measured Review",
+    desc: "Finish with structured evaluation, ATS-style analysis, and practical direction for the next attempt.",
+  },
+];
+
+const modes = [
+  {
+    img: hrImg,
+    title: "HR Interview Mode",
+    desc: "Behavioral questions, communication scoring, and professional response coaching.",
+  },
+  {
+    img: techImg,
+    title: "Technical Mode",
+    desc: "Coding, debugging, and systems-flavored prompts shaped by your role and resume projects.",
+  },
+  {
+    img: confidenceImg,
+    title: "Confidence Signals",
+    desc: "Track presence, pacing, and delivery quality while practicing in a more realistic setup.",
+  },
+  {
+    img: creditImg,
+    title: "Flexible Credits",
+    desc: "Use the platform casually or at scale with a simple credit system for premium runs.",
+  },
+];
+
+const faqItems = [
+  {
+    question: "How are the interviews personalized?",
+    answer: "We use your selected role, experience, resume text, and projects to generate more targeted interview scenarios.",
+  },
+  {
+    question: "Can I practice both HR and technical rounds?",
+    answer: "Yes. You can switch between technical and HR interview modes depending on the kind of preparation you need.",
+  },
+  {
+    question: "Do I get a report after each session?",
+    answer: "Every completed interview includes scoring, question-level feedback, and a downloadable report experience.",
+  },
+  {
+    question: "Is coding supported during the interview?",
+    answer: "Technical rounds include a live coding workspace with quick-run support for supported languages.",
+  },
+];
+
+const duplicated = (items) => [...items, ...items];
+
+function CarouselTrack({ items, duration = 30, reverse = false, renderCard }) {
+  return (
+    <div className='relative'>
+      <div className='pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[#040507] to-transparent' />
+      <div className='pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[#040507] to-transparent' />
+      <div className='hide-scrollbar overflow-hidden'>
+        <motion.div
+          className='flex w-max gap-6'
+          animate={{ x: reverse ? ["-50%", "0%"] : ["0%", "-50%"] }}
+          transition={{ duration, ease: "linear", repeat: Infinity }}
+        >
+          {duplicated(items).map((item, index) => renderCard(item, index))}
+        </motion.div>
+      </div>
+    </div>
+  );
+}
 
 function Home() {
   const { userData } = useSelector((state) => state.user)
   const [showAuth, setShowAuth] = useState(false);
   const navigate = useNavigate()
+
+  const goToInterview = () => {
+    if (!userData) {
+      setShowAuth(true)
+      return
+    }
+
+    navigate("/interview")
+  }
+
+  const goToHistory = () => {
+    if (!userData) {
+      setShowAuth(true)
+      return
+    }
+
+    navigate("/history")
+  }
+
   return (
-    <div className='min-h-screen flex flex-col bg-transparent'>
+    <div className='relative min-h-screen overflow-hidden bg-transparent text-white'>
+      <div className='pointer-events-none fixed inset-0'>
+        <div className='absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(16,185,129,0.18),transparent_14%),radial-gradient(circle_at_50%_24%,rgba(34,211,238,0.08),transparent_22%),linear-gradient(180deg,#040507_0%,#06080d_42%,#040507_100%)]' />
+        <div className='absolute left-1/2 top-[10rem] h-[32rem] w-[80rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(52,211,153,0.18)_0%,rgba(16,185,129,0.1)_28%,rgba(5,8,12,0)_68%)] blur-3xl' />
+        <div className='absolute left-1/2 top-[17rem] h-[26rem] w-[64rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.1)_0%,rgba(4,5,7,0)_66%)] blur-3xl' />
+        <div className='absolute bottom-[-10rem] left-1/2 h-[26rem] w-[86rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.1)_0%,rgba(4,5,7,0)_65%)] blur-3xl' />
+      </div>
       <Navbar />
 
-      <div className='flex-1 px-6 py-20'>
-        <div className='max-w-6xl mx-auto'>
+      <main className='relative z-10 overflow-hidden'>
+        <section id='home' className='relative px-6 pb-24 pt-14 sm:pt-20'>
+          <div className='relative mx-auto max-w-6xl text-center'>
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className='mb-8 flex justify-center'
+            >
+              <div className='inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/80 backdrop-blur'>
+                <span className='rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-300'>2025</span>
+                <span>Interview Intelligence Studio</span>
+              </div>
+            </motion.div>
 
-          <div className='flex justify-center mb-6'>
-            <div className='flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-sm text-slate-600 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-300'>
-              <HiSparkles size={16} className="rounded-full bg-green-50 text-green-600 dark:bg-emerald-500/20 dark:text-emerald-300" />
-              AI Powered Smart Interview Platform
-            </div>
-
-
-          </div>
-          <div className='text-center mb-28'>
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className='max-w-4xl mx-auto text-4xl font-semibold leading-tight text-slate-900 md:text-6xl dark:text-slate-50'>
-              Practice Interviews with
-              <span className='relative inline-block'>
-                <span className='rounded-full bg-green-100 px-5 py-1 text-green-600 dark:bg-emerald-500/20 dark:text-emerald-300'>
-                  AI Intelligence
-
-                </span>
+              transition={{ duration: 0.7 }}
+              className='mx-auto max-w-5xl text-5xl font-medium leading-[0.98] tracking-[-0.04em] text-white sm:text-6xl lg:text-[88px]'
+            >
+              <span className='bg-[linear-gradient(180deg,#ffffff_0%,#d7fff1_68%,#95f0d2_100%)] bg-clip-text text-transparent'>
+                AI-Driven Interview Practice
               </span>
-
-
-
+              <span className='block bg-[linear-gradient(180deg,#d7fff1_0%,#8ddcf9_52%,#ffffff_100%)] bg-clip-text text-transparent'>
+                Built to sharpen real outcomes.
+              </span>
             </motion.h1>
 
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.8 }}
-              className='mx-auto mt-6 max-w-2xl text-lg text-slate-500 dark:text-slate-300'>
-              Role-based mock interviews with smart follow-ups,
-              adaptive difficulty and real-time performance evaluation.
-
+              transition={{ duration: 0.9 }}
+              className='mx-auto mt-8 max-w-2xl text-base leading-8 text-white/55 sm:text-lg'
+            >
+              Practice technical and behavioral interviews with resume-aware prompts,
+              real-time coding space, AI scoring, and structured reports designed to help you improve faster.
             </motion.p>
 
-            <div className='flex flex-wrap justify-center gap-4 mt-10'>
-              <motion.button
-                onClick={() => {
-                  if (!userData) {
-                    setShowAuth(true)
-                    return;
-                  }
-                  navigate("/interview")
-                }}
-                whileHover={{ opacity: 0.9, scale: 1.03 }}
-                whileTap={{ opacity: 1, scale: 0.98 }}
-                className='rounded-full bg-slate-950 px-10 py-3 text-white shadow-md transition hover:opacity-90 dark:bg-emerald-500 dark:text-slate-950'>
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.9 }}
+              className='mt-10 flex flex-wrap items-center justify-center gap-4'
+            >
+              <button
+                onClick={goToInterview}
+                className='rounded-2xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition hover:bg-emerald-100'
+              >
                 Start Interview
+              </button>
+              <button
+                onClick={goToHistory}
+                className='rounded-2xl border border-white/12 bg-white/[0.06] px-7 py-3.5 text-sm font-semibold text-white/82 backdrop-blur transition hover:bg-white/[0.1]'
+              >
+                View Reports
+              </button>
+            </motion.div>
 
-              </motion.button>
-
-              <motion.button
-                onClick={() => {
-                  if (!userData) {
-                    setShowAuth(true)
-                    return;
-                  }
-                  navigate("/history")
-                }}
-                whileHover={{ opacity: 0.9, scale: 1.03 }}
-                whileTap={{ opacity: 1, scale: 0.98 }}
-                className='rounded-full border border-slate-300 px-10 py-3 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800'>
-                View History
-
-              </motion.button>
+            <div className='relative mx-auto mt-16 max-w-5xl overflow-hidden rounded-[40px] border border-white/8 bg-transparent px-8 pb-16 pt-14 shadow-none'>
+              <div className='relative z-10'>
+                <div className='mx-auto flex w-fit items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/55'>
+                  <HiSparkles className='text-emerald-300' />
+                  Trusted Interview Workflow
+                </div>
+                <div className='mt-16 grid grid-cols-2 gap-6 text-white/22 sm:grid-cols-4'>
+                  {["Resume-aware", "Live coding", "AI scoring", "Progress reports"].map((item) => (
+                    <div key={item} className='text-sm font-semibold uppercase tracking-[0.28em]'>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
+        </section>
 
-          <div className='flex flex-col md:flex-row justify-center items-center gap-10 mb-28'>
-            {
-              [
-                {
-                  icon: <BsRobot size={24} />,
-                  step: "STEP 1",
-                  title: "Role & Experience Selection",
-                  desc: "AI adjusts difficulty based on selected job role."
-                },
-                {
-                  icon: <BsMic size={24} />,
-                  step: "STEP 2",
-                  title: "Smart Voice Interview",
-                  desc: "Dynamic follow-up questions based on your answers."
-                },
-                {
-                  icon: <BsClock size={24} />,
-                  step: "STEP 3",
-                  title: "Timer Based Simulation",
-                  desc: "Real interview pressure with time tracking."
-                }
-              ].map((item, index) => (
-                <motion.div key={index}
-                  initial={{ opacity: 0, y: 60 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 + index * 0.2 }}
-                  whileHover={{ rotate: 0, scale: 1.06 }}
+        <section id='about' className='border-t border-white/6 px-6 py-24'>
+          <div className='mx-auto max-w-5xl text-center'>
+            <div className='mx-auto mb-8 flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70'>
+              <BsStars className='text-emerald-300' />
+              About InterVue
+            </div>
+            <h2 className='text-4xl font-medium leading-tight tracking-[-0.03em] sm:text-5xl'>
+              <span className='bg-[linear-gradient(90deg,#ffffff_8%,#d8fff0_42%,#8adcf6_100%)] bg-clip-text text-transparent'>
+              Built on clarity, realism, and high-signal feedback for candidates who want better interview outcomes.
+              </span>
+            </h2>
+            <p className='mx-auto mt-8 max-w-3xl text-lg leading-8 text-white/50'>
+              We combine AI-generated mock interviews, resume context, live coding workflow,
+              ATS-style scoring, and progress analytics into one system that feels polished enough for serious preparation.
+            </p>
+          </div>
+        </section>
 
-                  className={`
-        relative rounded-3xl border-2 border-green-100 bg-white/85 p-10 shadow-md backdrop-blur hover:border-green-500 hover:shadow-2xl dark:border-slate-700/80 dark:bg-slate-900/85 dark:hover:border-emerald-500
-        w-80 max-w-[90%]
-        transition-all duration-300
-        ${index === 0 ? "rotate-[-4deg]" : ""}
-        ${index === 1 ? "rotate-[3deg] md:-mt-6 shadow-xl" : ""}
-        ${index === 2 ? "rotate-[-3deg]" : ""}
-      `}>
+        <section id='portfolio' className='px-6 py-10'>
+          <div className='mx-auto max-w-6xl'>
+            <div className='mb-16 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between'>
+              <div>
+                <div className='mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70'>
+                  <BsRobot className='text-emerald-300' />
+                  Core Capabilities
+                </div>
+                <h2 className='max-w-2xl text-4xl font-medium tracking-[-0.03em] sm:text-5xl'>
+                  <span className='bg-[linear-gradient(90deg,#ffffff_10%,#d8fff1_52%,#93e5ff_100%)] bg-clip-text text-transparent'>
+                  Premium interview tooling, presented like a modern AI studio.
+                  </span>
+                </h2>
+              </div>
+              <p className='max-w-xl text-sm leading-7 text-white/50 sm:text-base'>
+                The platform combines realistic interview execution with polished evaluation layers,
+                so candidates can practice in a more credible environment.
+              </p>
+            </div>
 
-                  <div className='absolute -top-8 left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-2xl border-2 border-green-500 bg-white text-green-600 shadow-lg dark:bg-slate-900 dark:text-emerald-300'>
-                    {item.icon}</div>
-                  <div className='pt-10 text-center'>
-                    <div className='text-xs text-green-600 font-semibold mb-2 tracking-wider'>{item.step}</div>
-                    <h3 className='mb-3 text-lg font-semibold text-slate-900 dark:text-slate-50'>{item.title}</h3>
-                    <p className='text-sm leading-relaxed text-slate-500 dark:text-slate-300'>{item.desc}</p>
+            <CarouselTrack
+              items={capabilityCards}
+              duration={34}
+              renderCard={(item, index) => (
+                <motion.div
+                  key={`${item.title}-${index}`}
+                  whileHover={{ y: -10, scale: 1.015 }}
+                  className='group w-[min(30rem,82vw)] overflow-hidden rounded-[32px] border border-white/8 bg-white/[0.035] p-8 shadow-[0_20px_80px_rgba(0,0,0,0.18)] transition hover:border-emerald-500/35 hover:bg-white/[0.055]'
+                >
+                  <div className='flex flex-col gap-8'>
+                    <div className='flex items-center gap-4'>
+                      <div className='flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.16)]'>
+                        {item.icon}
+                      </div>
+                      <h3 className='text-2xl font-semibold text-white'>{item.title}</h3>
+                    </div>
+                    <p className='text-base leading-7 text-white/55'>{item.desc}</p>
+                    <div className='rounded-[28px] border border-white/8 bg-black/30 p-6 transition group-hover:border-emerald-500/20'>
+                      <img src={item.image} alt={item.title} className='h-auto max-h-64 w-full object-contain transition duration-300 group-hover:scale-[1.03]' />
+                    </div>
                   </div>
-
-
                 </motion.div>
-              ))
-            }
+              )}
+            />
           </div>
+        </section>
 
-
-          <div className='mb-32'>
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className='mb-16 text-center text-4xl font-semibold text-slate-900 dark:text-slate-50'>
-              Advanced AI{" "}
-              <span className="text-green-600">Capabilities</span>
-
-            </motion.h2>
-
-            <div className='grid md:grid-cols-2 gap-10'>
-              {
-                [
-                  {
-                    image: evalImg,
-                    icon: <BsBarChart size={20} />,
-                    title: "AI Answer Evaluation",
-                    desc: "Scores communication, technical accuracy and confidence."
-                  },
-                  {
-                    image: resumeImg,
-                    icon: <BsFileEarmarkText size={20} />,
-                    title: "Resume Based Interview",
-                    desc: "Project-specific questions based on uploaded resume."
-                  },
-                  {
-                    image: pdfImg,
-                    icon: <BsFileEarmarkText size={20} />,
-                    title: "Downloadable PDF Report",
-                    desc: "Detailed strengths, weaknesses and improvement insights."
-                  },
-                  {
-                    image: analyticsImg,
-                    icon: <BsBarChart size={20} />,
-                    title: "History & Analytics",
-                    desc: "Track progress with performance graphs and topic analysis."
-                  }
-                ].map((item, index) => (
-                  <motion.div key={index}
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.1 }}
-                    whileHover={{ scale: 1.02 }}
-                    className='rounded-3xl border border-white/70 bg-white/85 p-8 shadow-sm transition-all hover:shadow-xl dark:border-slate-700/80 dark:bg-slate-900/88'>
-                    <div className='flex flex-col md:flex-row items-center gap-8'>
-                      <div className='w-full md:w-1/2 flex justify-center'>
-                        <img src={item.image} alt={item.title} className='w-full h-auto object-contain max-h-64' />
-                      </div>
-
-                      <div className='w-full md:w-1/2'>
-                        <div className='mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600 dark:bg-emerald-500/20 dark:text-emerald-300'>
-                          {item.icon}
-                        </div>
-                        <h3 className='mb-3 text-xl font-semibold text-slate-900 dark:text-slate-50'>{item.title}</h3>
-                        <p className='text-sm leading-relaxed text-slate-500 dark:text-slate-300'>{item.desc}</p>
-                      </div>
-
-                    </div>
-
-
-                  </motion.div>
-                ))
-              }
+        <section className='px-6 py-24'>
+          <div className='mx-auto max-w-6xl'>
+            <div className='mb-16 text-center'>
+              <div className='mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70'>
+                <BsMic className='text-emerald-300' />
+                Workflow
+              </div>
+              <h2 className='text-4xl font-medium tracking-[-0.03em] sm:text-5xl'>
+                <span className='bg-[linear-gradient(90deg,#ffffff_12%,#dbfff2_48%,#95dfff_100%)] bg-clip-text text-transparent'>
+                A cleaner process from setup to scored review.
+                </span>
+              </h2>
             </div>
 
-
-          </div>
-
-          <div className='mb-32'>
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className='text-4xl font-semibold text-center mb-16'>
-              Multiple Interview{" "}
-              <span className="text-green-600">Modes</span>
-
-            </motion.h2>
-
-            <div className='grid md:grid-cols-2 gap-10'>
-              {
-                [
-                  {
-                    img: hrImg,
-                    title: "HR Interview Mode",
-                    desc: "Behavioral and communication based evaluation."
-                  },
-                  {
-                    img: techImg,
-                    title: "Technical Mode",
-                    desc: "Deep technical questioning based on selected role."
-                  },
-
-                  {
-                    img: confidenceImg,
-                    title: "Confidence Detection",
-                    desc: "Basic tone and voice analysis insights."
-                  },
-                  {
-                    img: creditImg,
-                    title: "Credits System",
-                    desc: "Unlock premium interview sessions easily."
-                  }
-                ].map((mode, index) => (
-                  <motion.div key={index}
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.1 }}
-                    whileHover={{ y: -6 }}
-                    className="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all">
-
-                    <div className='flex items-center justify-between gap-6'>
-                      <div className="w-1/2">
-                        <h3 className="font-semibold text-xl mb-3">
-                          {mode.title}
-                        </h3>
-
-                        <p className="text-gray-500 text-sm leading-relaxed">
-                          {mode.desc}
-                        </p>
-                      </div>
-
-                      {/* RIGHT IMAGE */}
-                      <div className="w-1/2 flex justify-end">
-                        <img
-                          src={mode.img}
-                          alt={mode.title}
-                          className="w-28 h-28 object-contain"
-                        />
-                      </div>
-
-
-
+            <CarouselTrack
+              items={processCards}
+              duration={26}
+              reverse
+              renderCard={(item, index) => (
+                <motion.div
+                  key={`${item.step}-${index}`}
+                  whileHover={{ y: -8, rotateX: 3 }}
+                  className='w-[min(24rem,78vw)] rounded-[28px] border border-white/8 bg-white/[0.03] p-8 transition hover:border-emerald-500/30 hover:bg-white/[0.05]'
+                >
+                  <div className='mb-6 flex items-center justify-between'>
+                    <div className='flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-300'>
+                      {item.icon}
                     </div>
+                    <span className='text-xs font-semibold tracking-[0.3em] text-white/28'>{item.step}</span>
+                  </div>
+                  <h3 className='text-2xl font-semibold text-white'>{item.title}</h3>
+                  <p className='mt-4 text-base leading-7 text-white/55'>{item.desc}</p>
+                </motion.div>
+              )}
+            />
+          </div>
+        </section>
 
-
-                  </motion.div>
-                ))
-              }
+        <section id='contact' className='px-6 py-10'>
+          <div className='mx-auto max-w-6xl'>
+            <div className='mb-10'>
+              <div className='mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70'>
+                <BsStars className='text-emerald-300' />
+                Practice Modes
+              </div>
+              <h2 className='max-w-3xl text-4xl font-medium tracking-[-0.03em] sm:text-5xl'>
+                <span className='bg-[linear-gradient(90deg,#ffffff_12%,#d9fff1_50%,#8ce0ff_100%)] bg-clip-text text-transparent'>
+                Explore the platform through animated product lanes instead of static boxes.
+                </span>
+              </h2>
             </div>
 
-
+            <CarouselTrack
+              items={modes}
+              duration={28}
+              renderCard={(mode, index) => (
+                <motion.div
+                  key={`${mode.title}-${index}`}
+                  whileHover={{ y: -10, scale: 1.02 }}
+                  className='flex w-[min(28rem,84vw)] items-center justify-between gap-6 rounded-[30px] border border-white/8 bg-white/[0.04] p-8 transition hover:border-emerald-500/30 hover:bg-white/[0.055]'
+                >
+                  <div className='max-w-xs'>
+                    <h3 className='text-2xl font-semibold text-white'>{mode.title}</h3>
+                    <p className='mt-4 text-sm leading-7 text-white/55'>{mode.desc}</p>
+                  </div>
+                  <img src={mode.img} alt={mode.title} className='h-28 w-28 object-contain opacity-95 transition duration-300 group-hover:scale-105' />
+                </motion.div>
+              )}
+            />
           </div>
+        </section>
 
-        </div>
-      </div>
+        <section id='faq' className='px-6 py-24'>
+          <div className='mx-auto max-w-5xl'>
+            <div className='mb-12 text-center'>
+              <div className='mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70'>
+                <BsFileEarmarkText className='text-emerald-300' />
+                FAQ
+              </div>
+              <h2 className='text-4xl font-medium tracking-[-0.03em] sm:text-5xl'>
+                <span className='bg-[linear-gradient(90deg,#ffffff_10%,#dbfff2_44%,#94dfff_100%)] bg-clip-text text-transparent'>
+                Questions candidates usually ask before starting.
+                </span>
+              </h2>
+            </div>
+
+            <div className='space-y-4'>
+              {faqItems.map((item) => (
+                <div key={item.question} className='rounded-[24px] border border-white/8 bg-white/[0.03] p-6'>
+                  <h3 className='text-lg font-semibold text-white'>{item.question}</h3>
+                  <p className='mt-3 text-sm leading-7 text-white/55'>{item.answer}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className='px-6 pb-24'>
+          <div className='mx-auto max-w-6xl overflow-hidden rounded-[36px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-10 sm:p-14'>
+            <div className='grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-end'>
+              <div>
+                <div className='mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70'>
+                  <BsArrowRight className='text-emerald-300' />
+                  Launch Your Next Practice Session
+                </div>
+                <h2 className='max-w-3xl text-4xl font-medium tracking-[-0.03em] sm:text-5xl'>
+                  <span className='bg-[linear-gradient(90deg,#ffffff_12%,#dcfff4_44%,#94deff_100%)] bg-clip-text text-transparent'>
+                  Move from scattered preparation to a more premium interview routine.
+                  </span>
+                </h2>
+              </div>
+
+              <div className='flex flex-wrap justify-start gap-4 lg:justify-end'>
+                <button
+                  onClick={goToInterview}
+                  className='rounded-2xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition hover:bg-emerald-100'
+                >
+                  Start Interview
+                </button>
+                <button
+                  onClick={() => navigate("/pricing")}
+                  className='rounded-2xl border border-white/12 bg-white/[0.06] px-7 py-3.5 text-sm font-semibold text-white/82 backdrop-blur transition hover:bg-white/[0.1]'
+                >
+                  Explore Plans
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
 
       {showAuth && <AuthModel onClose={() => setShowAuth(false)} />}
 
-        <Footer/>
-
+      <Footer />
     </div>
   )
 }

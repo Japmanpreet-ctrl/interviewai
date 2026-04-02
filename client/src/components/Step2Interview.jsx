@@ -1092,7 +1092,7 @@ function Step2Interview({ interviewData, onFinish }) {
         <div className="border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-950 dark:text-slate-50 sm:text-3xl">AI Smart Interview</h2>
+              <h2 className="text-2xl font-bold text-slate-950 dark:text-slate-50 sm:text-3xl">InterVue Session</h2>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">

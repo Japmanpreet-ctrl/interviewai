@@ -1,14 +1,20 @@
 import axios from "axios"
 
-export const askAi = async (messages, model = "deepseek/deepseek-chat") => {
+export const askAi = async (messages, model = "deepseek/deepseek-chat", options = {}) => {
     try {
         if(!messages || !Array.isArray(messages) || messages.length === 0) {
             throw new Error("Messages array is empty.");
         }
+        const {
+            maxTokens = 2200,
+            temperature,
+        } = options;
         const response = await axios.post("https://openrouter.ai/api/v1/chat/completions",
             {
                 model,
-                messages: messages
+                messages: messages,
+                max_tokens: maxTokens,
+                ...(typeof temperature === "number" ? { temperature } : {}),
 
             },
             {

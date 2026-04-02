@@ -31,7 +31,7 @@ function App() {
   }, [dispatch])
 
   return (
-    <div className='min-h-screen text-slate-900 transition-colors dark:text-slate-100'>
+    <div className='min-h-screen text-slate-100 transition-colors'>
       <Routes>
         <Route path='/' element={<Home />} />
         <Route path='/auth' element={<Auth />} />

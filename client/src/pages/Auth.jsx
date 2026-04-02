@@ -1,5 +1,5 @@
 import React from 'react'
-import { BsRobot } from "react-icons/bs";
+import { BsCameraVideoFill } from "react-icons/bs";
 import { IoSparkles } from "react-icons/io5";
 import { motion } from "motion/react"
 import { FcGoogle } from "react-icons/fc";
@@ -54,18 +54,18 @@ function Auth({isModel = false}) {
         border border-white/70 bg-white/88 shadow-2xl backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/88
       `}>
             <div className='flex items-center justify-center gap-3 mb-6'>
-                <div className='rounded-lg bg-slate-950 p-2 text-white dark:bg-emerald-500 dark:text-slate-950'>
-                    <BsRobot size={18}/>
-
+                <div className='relative rounded-lg bg-slate-950 p-2 text-white dark:bg-emerald-500 dark:text-slate-950'>
+                    <BsCameraVideoFill size={18}/>
+                    <span className='absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-current opacity-80' />
                 </div>
-                <h2 className='text-lg font-semibold text-slate-900 dark:text-slate-50'>InterviewIQ.AI</h2>
+                <h2 className='text-lg font-semibold text-slate-900 dark:text-slate-50'>InterVue</h2>
             </div>
 
             <h1 className='mb-4 text-center text-2xl font-semibold leading-snug text-slate-900 md:text-3xl dark:text-slate-50'>
                 Continue with
                 <span className='inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-green-600 dark:bg-emerald-500/20 dark:text-emerald-300'>
                     <IoSparkles size={16}/>
-                    AI Smart Interview
+                    InterVue Session
 
                 </span>
             </h1>
